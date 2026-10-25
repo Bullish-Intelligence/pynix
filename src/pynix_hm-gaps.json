@@ -1,0 +1,27 @@
+{
+ "gaps": {
+  "Native: unknown constructor": 4,
+  "attrListOf: unknown constructor": 2,
+  "attrTag: a tagged union: not mapped in S1": 3,
+  "dagOf: a Home Manager DAG: not mapped in S1": 5,
+  "functionTo: a function": 10,
+  "gvariant: unknown constructor": 4,
+  "matrixOf: unknown constructor": 1,
+  "nixpkgs-overlay: executable Nix code (A2)": 1,
+  "overlayFunction: a function (A2)": 1,
+  "percentStr: unknown constructor": 2,
+  "raw: JsonValue (S9)": 28,
+  "recursive data type: JsonValue": 794,
+  "selectorFunction: a function (A2)": 1,
+  "submodule (whole configuration)": 1,
+  "unspecified: JsonValue (S9)": 19
+ },
+ "modules": 664,
+ "package": "pynix_hm",
+ "roots": 4063,
+ "rootsKept": 3742,
+ "source": {
+  "home-manager": "fae6e9e42c3b762ab47635cddcfaf6f52374a61b",
+  "nixpkgs": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8"
+ }
+}

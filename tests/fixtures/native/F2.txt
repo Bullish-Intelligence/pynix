@@ -1,0 +1,13 @@
+from basix_config import *
+
+old = NixpkgsPin("old", "d233902339c02a9c334e7e593de68855ad26c4cb")
+
+machine = Machine(
+    name="trybox",
+    user="learner",
+    disk="/dev/disk/by-id/virtio-basix-disk",
+    profile=Console(),
+    capabilities=[],
+    programs=[Program(old.pkgs.hello)],
+    inputs=[Input("newmod", "path:/srv/example/inputs/newmod", modules=["default"], nixpkgs=old)],
+)

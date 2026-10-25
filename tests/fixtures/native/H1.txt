@@ -1,0 +1,10 @@
+from minix_config import *
+
+old = NixpkgsPin("old", "d233902339c02a9c334e7e593de68855ad26c4cb")
+
+home = Home(
+    user="learner",
+    programs=[Program(pkgs.ripgrep)],
+    native_modules=[NativeModule("example-tool-import.nix")],
+    inputs=[Input("example-tool", "git+file:///srv/example/example-tool?rev=01a02641040853959bc58315adbbf2f662f8fd4f", nixpkgs=old)],
+)

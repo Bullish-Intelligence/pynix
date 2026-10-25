@@ -1,0 +1,1 @@
+{"bindgenHook":["bindgenHook",0],"cargoBuildHook":["cargoBuildHook",0],"cargoCheckHook":["cargoCheckHook",0],"cargoInstallHook":["cargoInstallHook",0],"cargoNextestHook":["cargoNextestHook",0],"cargoSetupHook":["cargoSetupHook",0],"maturinBuildHook":["maturinBuildHook",0],"rustLibSrc":["rustLibSrc",0],"rustVendorSrc":["rustVendorSrc",0],"rustcSrc":["rustcSrc",0]}

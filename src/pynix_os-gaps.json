@@ -1,0 +1,28 @@
+{
+ "gaps": {
+  "Native: unknown constructor": 52,
+  "Toplevel NixOS config: a whole configuration": 1,
+  "attrListOf: unknown constructor": 2,
+  "attrTag: a tagged union: not mapped in S1": 2,
+  "attrsWith: unknown constructor": 1,
+  "elixirTuple: tagged attribute set (dict of JsonValue)": 1,
+  "enum without values": 1,
+  "function: a function": 2,
+  "functionTo: a function": 21,
+  "luaInline: inline Lua code": 1,
+  "nixpkgs-overlay: executable Nix code (A2)": 1,
+  "raw: JsonValue (S9)": 12,
+  "rawElixir: tagged attribute set (dict of JsonValue)": 11,
+  "recursive data type: JsonValue": 610,
+  "secret: a secret needs its own adapter (CONCEPT)": 8,
+  "submodule (whole configuration)": 3,
+  "unspecified: JsonValue (S9)": 126
+ },
+ "modules": 1870,
+ "package": "pynix_os",
+ "roots": 16655,
+ "rootsKept": 14947,
+ "source": {
+  "nixpkgs": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8"
+ }
+}

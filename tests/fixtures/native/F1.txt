@@ -1,0 +1,16 @@
+from basix_config import *
+
+old = NixpkgsPin("old", "d233902339c02a9c334e7e593de68855ad26c4cb")
+
+machine = Machine(
+    name="trybox",
+    user="learner",
+    disk="/dev/disk/by-id/virtio-basix-disk",
+    profile=Console(),
+    capabilities=[],
+    inputs=[
+        Input("modonly", "path:/srv/example/inputs/modonly", nixpkgs=old),
+        Input("modonly2", "path:/srv/example/inputs/modonly"),
+        Input("modonly3", "path:/srv/example/inputs/modonly", nixpkgs=OWN),
+    ],
+)

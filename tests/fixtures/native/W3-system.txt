@@ -1,0 +1,18 @@
+from basix_config import *
+from pynix_os.environment.__options__ import Environment
+from pynix_nirinit.pkgs import nirinit_pkgs
+from pynix_pytuin.pkgs import pytuin_pkgs
+from pynix_nirinitold.pkgs import nirinitold_pkgs
+
+old = NixpkgsPin("old", "d233902339c02a9c334e7e593de68855ad26c4cb")
+
+machine = Machine(
+    name="trybox",
+    user="learner",
+    disk="/dev/disk/by-id/virtio-basix-disk",
+    profile=Console(),
+    capabilities=[],
+    programs=[Program(old.pkgs.hello)],
+    options=[Environment(systemPackages=[nirinit_pkgs.nirinit, pytuin_pkgs.pytuin, nirinitold_pkgs.nirinit])],
+    inputs=[Input("nirinit", "github:amaanq/nirinit/0e43f61069f81bba1114475cae2e84aa0965a1a3"), Input("pytuin", "path:/srv/example/inputs/pytuin", nixpkgs=OWN), Input("nirinitold", "github:amaanq/nirinit/0e43f61069f81bba1114475cae2e84aa0965a1a3", nixpkgs=old)],
+)

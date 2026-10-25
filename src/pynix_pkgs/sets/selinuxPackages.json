@@ -1,0 +1,1 @@
+{"checkpolicy":["checkpolicy",1],"libselinux":["libselinux",0],"libsemanage":["libsemanage",0],"libsepol":["libsepol",0],"policycoreutils":["policycoreutils",0],"selinux_python":["selinux-python",0],"selinux_refpolicy":["selinux-refpolicy",0],"selinux_sandbox":["selinux-sandbox",1],"semodule_utils":["semodule-utils",0],"setools":["setools",0]}

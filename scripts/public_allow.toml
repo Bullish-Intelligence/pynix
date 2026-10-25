@@ -1,0 +1,217 @@
+# Reviewed exceptions for scripts/check_public.py. Each entry needs a reason.
+
+[[allow]]
+path = "gates/patterns.py"
+shape = "e-mail address"
+text = "x@y.socket"
+reason = "Reviewed: an invented sample or example value, not an owner fact."
+
+[[allow]]
+path = "gates/patterns.py"
+shape = "private IP address"
+text = "10.0.0.1"
+reason = "Reviewed: an invented sample or example value, not an owner fact."
+
+[[allow]]
+path = "nix/evaluate.nix"
+shape = "home folder"
+text = "/home/n1"
+reason = "Reviewed: an invented sample or example value, not an owner fact."
+
+[[allow]]
+path = "nix/input-packages.nix"
+shape = "home folder"
+text = "/home/n1"
+reason = "Reviewed: an invented sample or example value, not an owner fact."
+
+[[allow]]
+path = "src/pynix_os/boot/initrd.py"
+shape = "e-mail address"
+text = "systemd-nspawn@mycontainer.service"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/programs/hyprland.py"
+shape = "e-mail address"
+text = "wayland-session@Hyprland.target"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/programs/singularity.py"
+shape = "/mnt/"
+text = "/mnt/"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/__options__.py"
+shape = "private IP address"
+text = "192.168.0.0"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/clamav.py"
+shape = "home folder"
+text = "/home/foo"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/gitDaemon.py"
+shape = "git://"
+text = "git://"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/headscale.py"
+shape = "private IP address"
+text = "100.64.0.0"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/hercules_ci_agent.py"
+shape = "e-mail address"
+text = "help@hercules-ci.com"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/kresd.py"
+shape = "e-mail address"
+text = "kresd@1.service"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/livekit.py"
+shape = "home folder"
+text = "/home/self-hosting"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/n__3proxy.py"
+shape = "private IP address"
+text = "192.168.0.0"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/nebula.py"
+shape = "private IP address"
+text = "10.0.0.5"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/nsd.py"
+shape = "private IP address"
+text = "10.0.0.0"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/nsd.py"
+shape = "private IP address"
+text = "10.0.0.1"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/postfix.py"
+shape = "e-mail address"
+text = "user@domain.tld"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/prometheus.py"
+shape = "private IP address"
+text = "192.168.1.1"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/strongswan_swanctl.py"
+shape = "private IP address"
+text = "10.1.0.5"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/tabby.py"
+shape = "home folder"
+text = "/home/ghthor"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/tinc.py"
+shape = "private IP address"
+text = "192.168.1.0"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/services/tinc.py"
+shape = "private IP address"
+text = "192.168.1.1"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/systemd/__options__.py"
+shape = "e-mail address"
+text = "systemd-nspawn@mycontainer.service"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/systemd/network.py"
+shape = "e-mail address"
+text = "systemd-nspawn@mycontainer.service"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_os/systemd/user.py"
+shape = "e-mail address"
+text = "systemd-nspawn@mycontainer.service"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_pkgs/pkgs.pyi"
+shape = "private IP address"
+text = "10.0.26.2"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_pkgs/sets/gnome48Extensions.json"
+shape = "e-mail address"
+text = "AITwinMinds@gmail.com"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_pkgs/sets/gnome49Extensions.json"
+shape = "e-mail address"
+text = "AITwinMinds@gmail.com"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_pkgs/sets/gnome50Extensions.json"
+shape = "e-mail address"
+text = "AITwinMinds@gmail.com"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_pkgs/sets/gnomeExtensions.pyi"
+shape = "e-mail address"
+text = "username@google.com"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "src/pynix_pkgs/sets/gnomeExtensions.pyi"
+shape = "e-mail address"
+text = "wallpaper-changer@jomik.org"
+reason = "Option text copied from the upstream project; the value is a documentation example."
+
+[[allow]]
+path = "tests/test_engine_log.py"
+shape = "home folder"
+text = "/home/ada"
+reason = "Test sample of an invented path."
+
+[[allow]]
+path = "src/pynix_hm-fields.json"
+shape = "owner word"
+text = "\"waitFor"
+reason = "Generated from the Home Manager options; an option name holds a generic word that a private pattern matches."
+
+[[allow]]
+path = "src/pynix_os-fields.json"
+shape = "owner word"
+text = "\"Jool_Nat64_Value\", \"fra"
+reason = "Generated from the NixOS options; an option field holds a generic word that a private pattern matches."

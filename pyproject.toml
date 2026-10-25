@@ -1,0 +1,66 @@
+[project]
+name = "pynix"
+version = "0.3.0"
+description = "Typed Python values to Nix definitions: the nixdantic runtime, the option-class generator, and the generated libraries."
+readme = "README.md"
+requires-python = ">=3.13"
+
+authors = [
+  { name = "Bullish-Intelligence", email = "242310653+Bullish-Intelligence@users.noreply.github.com" },
+]
+
+# Pydantic is pinned to the version of the pinned nixpkgs: the compilers of Basix and minix take Pydantic from
+# nixpkgs (008-Q7), so the gates must test the same version.
+dependencies = [
+  "pydantic==2.13.4",
+]
+
+# The dev group declares the check tools (pytest, ruff, ty) directly: Testee
+# carries none of them. The tasks in `devenv.nix` call them. Keep `uv.lock` in Git.
+# ruff and ty are pinned to the versions of the pinned nixpkgs: ruff formats the generated tree, and the gates of
+# the generated libraries were proved with ty 0.0.84.
+[dependency-groups]
+dev = [
+  "pytest",
+  "ruff==0.16.10",
+  "ty==0.0.84",
+]
+
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+# `src/` holds every package of the release: the runtime, the generator, and the generated libraries.
+[tool.hatch.build.targets.wheel]
+packages = [
+  "src/nixdantic",
+  "src/pynix",
+  "src/pynix_os",
+  "src/pynix_hm",
+  "src/pynix_flake_parts",
+  "src/pynix_pkgs",
+  "src/pynix_native",
+  "src/pynix_engine",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+src = ["src"]
+# The generator writes these packages; the release check compares them with its output.
+# `gates/` holds the gate harness, copied from the 008 S10 spike code with small changes. It is a test tool, not part
+# of the release, and its style stays as the spike proved it. The gates check the generated libraries, not this code.
+extend-exclude = ["src/pynix_os", "src/pynix_hm", "src/pynix_flake_parts", "src/pynix_pkgs/pkgs.pyi", "gates"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# `ruff format` owns the line length. Comments and strings of the proven spike code stay as they are.
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+# ty checks `src` and `tests` (the tasks name them). `gates/` is excluded for the reason given under `[tool.ruff]`.
+[tool.ty.src]
+exclude = ["gates"]

@@ -1,0 +1,15 @@
+{
+ "gaps": {
+  "functionTo: a function": 2,
+  "raw: JsonValue (S9)": 8,
+  "unspecified: JsonValue (S9)": 1
+ },
+ "modules": 1,
+ "package": "pynix_flake_parts",
+ "roots": 12,
+ "rootsKept": 8,
+ "source": {
+  "flake-parts": "024633cd702b10285db5cb19b40ad48d2399ba60",
+  "nixpkgs-lib": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8"
+ }
+}

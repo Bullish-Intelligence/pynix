@@ -1,0 +1,12 @@
+from basix_config import *
+from pynix_nixpkgs_old import pkgs as old_pkgs
+
+old = NixpkgsPin("old", "d233902339c02a9c334e7e593de68855ad26c4cb")
+a = Program(old.pkgs.hello)
+b = Program(old.pkgs.helo)
+c = Program(old_pkgs.hello)
+d = Program(old_pkgs.helo)
+e = Input("x", "github:a/b", nixpkgs=old)
+f = Input("y", "github:a/b", nixpkgs=OWN)
+g = Input("z", "github:a/b", nixpkgs="old")
+h = NixpkgsPin("short", "d2339023")

@@ -1,0 +1,128 @@
+{
+ "D0": {
+  "b_ty_check": {
+   "caught": false,
+   "status": 0
+  },
+  "a_ty_probe": {
+   "caught": false,
+   "status": 0
+  },
+  "c_runtime": {
+   "caught": false,
+   "status": 0
+  },
+  "d_verifytypes": {
+   "caught": false,
+   "status": 0
+  }
+ },
+ "D1": {
+  "b_ty_check": {
+   "caught": false,
+   "status": 0
+  },
+  "a_ty_probe": {
+   "caught": true,
+   "status": 1
+  },
+  "c_runtime": {
+   "caught": true,
+   "status": 1
+  },
+  "d_verifytypes": {
+   "caught": false,
+   "status": 0
+  }
+ },
+ "D1b": {
+  "b_ty_check": {
+   "caught": false,
+   "status": 0
+  },
+  "a_ty_probe": {
+   "caught": true,
+   "status": 1
+  },
+  "c_runtime": {
+   "caught": true,
+   "status": 1
+  },
+  "d_verifytypes": {
+   "caught": false,
+   "status": 0
+  }
+ },
+ "D2": {
+  "b_ty_check": {
+   "caught": true,
+   "status": 1
+  },
+  "a_ty_probe": {
+   "caught": true,
+   "status": 1
+  },
+  "c_runtime": {
+   "caught": true,
+   "status": 1
+  },
+  "d_verifytypes": {
+   "caught": true,
+   "status": 1
+  }
+ },
+ "D3": {
+  "b_ty_check": {
+   "caught": false,
+   "status": 0
+  },
+  "a_ty_probe": {
+   "caught": true,
+   "status": 1
+  },
+  "c_runtime": {
+   "caught": true,
+   "status": 1
+  },
+  "d_verifytypes": {
+   "caught": false,
+   "status": 0
+  }
+ },
+ "D4": {
+  "b_ty_check": {
+   "caught": false,
+   "status": 0
+  },
+  "a_ty_probe": {
+   "caught": true,
+   "status": 1
+  },
+  "c_runtime": {
+   "caught": true,
+   "status": 1
+  },
+  "d_verifytypes": {
+   "caught": false,
+   "status": 0
+  }
+ },
+ "D5": {
+  "b_ty_check": {
+   "caught": false,
+   "status": 0
+  },
+  "a_ty_probe": {
+   "caught": true,
+   "status": 1
+  },
+  "c_runtime": {
+   "caught": true,
+   "status": 1
+  },
+  "d_verifytypes": {
+   "caught": true,
+   "status": 1
+  }
+ }
+}
