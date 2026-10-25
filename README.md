@@ -86,6 +86,10 @@ skills linked under `.agents/skills/`.
 This project is managed by CopyRoom. Use the central CopyRoom skill linked at
 `.agents/skills/copyroom/SKILL.md` for the update workflow.
 
+## Contributing
+
+Pull requests are welcome, but the author does not promise a review.
+
 ## Author
 
 Bullish-Intelligence <242310653+Bullish-Intelligence@users.noreply.github.com>
