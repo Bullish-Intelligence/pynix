@@ -1,13 +1,20 @@
 """One run of a command: the workspace, the runner, the clock, and the log (009-D15).
 
-Every plain line and every command goes into `.git/NAME/last.log`. With `verbose` the session also prints them.
+Every plain line and every command goes into `NAME/last.log` in the git folder of the workspace. With `verbose` the
+session also prints them.
+
+The git folder is `ws/.git` in a normal clone. In a linked worktree it is the folder that the `.git` file names.
+`state` belongs to one checkout: the log, the compiler, the result, and the inputs. `lock_path` lies in the common
+git folder, so all worktrees of one repository share one lock. In a normal clone both lie in `ws/.git/NAME`.
 """
 
+import fcntl
 import os
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TextIO
 
+from .gitdir import git_dirs
 from .layer import EXIT_FAILED, Layer
 from .runner import Clock, Result, Runner
 
@@ -38,11 +45,27 @@ class Session:
         self.env = env
         self.verbose = verbose
         self._say = say
-        self.state = ws / ".git" / layer.name
+        dirs = git_dirs(ws)
+        if dirs is None:
+            raise Fail(layer.text("not_a_workspace", path=str(ws)))
+        git_dir, common_dir = dirs
+        self.state = git_dir / layer.name
+        self.lock_path = common_dir / layer.name / "lock"
         self.state.mkdir(parents=True, exist_ok=True)
+        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
         self.log_path = self.state / "last.log"
         self._log: TextIO | None = None
         self.identity_known = True
+
+    def try_lock(self) -> TextIO | None:
+        """Take the lock of the repository: one run at a time. Return the open handle, or None when another run holds it."""
+        handle = self.lock_path.open("w")
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            handle.close()
+            return None
+        return handle
 
     def open_log(self) -> None:
         """Start a fresh log. Call it only while you hold the lock, so a busy run keeps the log of the first run."""

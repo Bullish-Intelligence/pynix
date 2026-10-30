@@ -4,12 +4,12 @@ Order of an apply: lock, stage, compile, stage, build, switch, health check, fin
 Order of an undo: lock, restore the files, then the apply above.
 """
 
-import fcntl
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TextIO
 
 from . import steps
+from .gitdir import git_dirs
 from .layer import EXIT_CHANGED, EXIT_FAILED, EXIT_UNHEALTHY, Layer, Plan
 from .runner import Clock, Runner, SubprocessRunner, SystemClock
 from .session import Fail, Session, default_env, print_flush
@@ -45,7 +45,7 @@ class Engine:
 
     # --- the run ------------------------------------------------------------------------------
     def _run(self, body: Callable[[Session, str], int]) -> int:
-        if not (self.ws / ".git").is_dir():
+        if git_dirs(self.ws) is None:
             self.say(self.layer.text("not_a_workspace", path=str(self.ws)))
             return EXIT_FAILED
         session = Session(self.layer, self.ws, self.runner, self.clock, self.say, self.env, self.verbose)
@@ -75,14 +75,8 @@ class Engine:
         return value
 
     def _lock(self, session: Session) -> TextIO | None:
-        """Take the workspace lock: one apply at a time. Return None when another run holds it."""
-        handle = (session.state / "lock").open("w")
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            handle.close()
-            return None
-        return handle
+        """Take the lock of the repository: one apply at a time. Return None when another run holds it."""
+        return session.try_lock()
 
     # --- apply --------------------------------------------------------------------------------
     def _apply(self, session: Session, on_fail: str, message: str | None) -> int:

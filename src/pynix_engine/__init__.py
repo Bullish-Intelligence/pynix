@@ -5,6 +5,7 @@ A command builds a `Layer`, makes an `Engine`, and calls `apply` or `undo`. The 
 """
 
 from .engine import Engine
+from .gitdir import git_dirs
 from .layer import (
     EXIT_CHANGED,
     EXIT_FAILED,
@@ -51,6 +52,7 @@ __all__ = [
     "build",
     "build_compiler",
     "default_compile",
+    "git_dirs",
     "parse_bad_units",
     "run_compiler",
     "stage",

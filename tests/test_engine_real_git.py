@@ -3,6 +3,7 @@
 The other engine tests model git with `FakeGit`. These tests check the git commands themselves.
 """
 
+import fcntl
 import os
 import subprocess
 from collections.abc import Callable, Sequence
@@ -11,7 +12,7 @@ from pathlib import Path
 import pytest
 from test_engine_support import GOOD_UNITS, HEALTH, HEALTH_USER, TOP_NEW, World, basix_layer, minix_layer
 
-from pynix_engine import Engine, Layer, Result, SubprocessRunner
+from pynix_engine import Engine, Layer, Result, Session, SubprocessRunner
 from pynix_engine.testing import FakeClock, FakeRunner
 
 GIT_ENV = {
@@ -207,3 +208,97 @@ def test_apply_names_the_new_files_after_the_stage(ws: Path) -> None:
     lines: list[str] = []
     assert engine(ws, lines)[0].apply() == 0, lines
     assert lines[0] == "new files that basix will save: notes.txt"
+
+
+# --- the git folder of a linked worktree (Gap B) ------------------------------------------------------------
+def make_session(ws: Path) -> Session:
+    return Session(basix_layer(World()), ws, FakeRunner(), FakeClock(), lambda line: None, {})
+
+
+@pytest.fixture
+def worktrees(ws: Path, tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
+    """The main checkout and a linked worktree of the same repository."""
+    wt = tmp_path_factory.mktemp("linked") / "wt"
+    git(ws, "worktree", "add", "-q", "--detach", str(wt))
+    return ws, wt
+
+
+def test_a_clone_keeps_its_state_and_lock_in_the_git_folder(ws: Path) -> None:
+    session = make_session(ws)
+    assert session.state == ws / ".git" / "basix"
+    assert session.lock_path == ws / ".git" / "basix" / "lock"
+    assert session.state.is_dir()
+
+
+def test_two_worktrees_have_two_states_and_one_lock(worktrees: tuple[Path, Path]) -> None:
+    main, wt = worktrees
+    first, second = make_session(main), make_session(wt)
+    assert first.state != second.state
+    assert second.state == main / ".git" / "worktrees" / "wt" / "basix"
+    assert first.lock_path == second.lock_path == main / ".git" / "basix" / "lock"
+    assert first.log_path != second.log_path
+
+
+def test_one_worktree_holds_the_lock_against_the_other(worktrees: tuple[Path, Path]) -> None:
+    main, wt = worktrees
+    first, second = make_session(main), make_session(wt)
+    handle = first.try_lock()
+    assert handle is not None
+    assert second.try_lock() is None
+    lines: list[str] = []
+    assert engine(wt, lines)[0].apply() == 1
+    assert lines == [second.word("busy")]
+    handle.close()
+    again = second.try_lock()
+    assert again is not None
+    again.close()
+
+
+def test_try_lock_gives_the_lock_back_when_the_handle_closes(ws: Path) -> None:
+    session = make_session(ws)
+    handle = session.try_lock()
+    assert handle is not None
+    handle.close()
+    with session.lock_path.open("w") as other:
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def test_apply_runs_in_a_linked_worktree(worktrees: tuple[Path, Path]) -> None:
+    _, wt = worktrees
+    (wt / "system.py").write_text("machine = 2\n")
+    lines: list[str] = []
+    assert engine(wt, lines)[0].apply() == 0, lines
+    assert not any("not a basix workspace" in line for line in lines)
+    assert lines[-1].startswith("saved")
+    assert git(wt, "log", "-1", "--format=%s") != "first\n"
+    assert (wt / ".git").is_file()
+
+
+def test_undo_runs_in_a_linked_worktree(worktrees: tuple[Path, Path]) -> None:
+    _, wt = worktrees
+    (wt / "system.py").write_text("machine = 2\n")
+    assert engine(wt, [])[0].apply() == 0
+    (wt / "system.py").write_text("machine = 3\n")
+    lines: list[str] = []
+    assert engine(wt, lines)[0].undo() == 0, lines
+    assert not any("not a basix workspace" in line for line in lines)
+    assert (wt / "system.py").read_text() == "machine = 2\n"
+
+
+def test_the_log_of_a_worktree_lies_in_its_own_git_folder(worktrees: tuple[Path, Path]) -> None:
+    main, wt = worktrees
+    (wt / "system.py").write_text("machine = 2\n")
+    assert engine(wt, [])[0].apply() == 0
+    assert (main / ".git" / "worktrees" / "wt" / "basix" / "last.log").is_file()
+    assert not (main / ".git" / "basix" / "last.log").exists()
+
+
+def test_a_bad_dot_git_file_prints_the_plain_line(tmp_path: Path) -> None:
+    (tmp_path / ".git").write_text("this is not a pointer\n")
+    lines: list[str] = []
+    eng, runner = engine(tmp_path, lines)
+    assert eng.apply() == 1
+    assert eng.undo() == 1
+    assert lines == [f"{tmp_path} is not a basix workspace. Go to ~/basix first."] * 2
+    assert runner.git_calls == []
+    assert runner.fake.calls == []
