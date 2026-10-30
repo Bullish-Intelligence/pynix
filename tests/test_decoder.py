@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from nixdantic import Native, Package, Text, supplied
+from nixdantic import ExeOf, Native, Package, Text, supplied
+from pynix_native import InputProg, NixpkgsProg
 from pynix_pkgs._pkgref import Exe
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,9 +31,17 @@ let
     outPath = "/nix/store/00000000000000000000000000000000-" + name;
     meta = lib.optionalAttrs (main != null) { mainProgram = main; };
   };
-  pkgs = { hello = package "hello" "hello"; ripgrep = package "ripgrep" "rg"; };
+  system = "x86_64-linux";
+  pkgs = {
+    hello = package "hello" "hello";
+    ripgrep = package "ripgrep" "rg";
+    stdenv.hostPlatform.system = system;
+  };
+  # `daemon` has a main program that differs from its attribute name. The input and the pin give different store paths.
+  nixdemo = { packages.${system}.daemon = package "daemon-input" "daemon-bin"; };
+  nixpkgsOld = { legacyPackages.${system}.daemon = package "daemon-old" "daemon-old-bin"; };
   result = lib.evalModules {
-    specialArgs = { inherit pkgs; inputs = { marker = "from-inputs"; }; };
+    specialArgs = { inherit pkgs; inputs = { marker = "from-inputs"; nix-demo = nixdemo; nixpkgs-old = nixpkgsOld; }; };
     modules = [
       { options.fixture.value = lib.mkOption { type = lib.types.raw; }; }
       (decoder { fragment = builtins.fromJSON ''@FRAGMENT@''; nativeRoot = @NATIVE@; })
@@ -143,3 +152,57 @@ def test_a_whole_value_file_without_named_arguments_is_returned_as_a_function(tm
 def test_a_file_without_named_arguments_is_called_when_the_reference_has_an_attribute_path(tmp_path: Path) -> None:
     (tmp_path / "bare.nix").write_text('{ ... }: { bare = "bare"; }')
     assert decode(Native("bare.nix", ["bare"]), tmp_path) == "bare"
+
+
+STORE = "/nix/store/00000000000000000000000000000000-"
+DAEMON_FILE = "{ pkgs, inputs, ... }: { daemon = inputs.nix-demo.packages.${pkgs.stdenv.hostPlatform.system}.daemon; }"
+
+
+@needs_nix
+def test_exe_of_an_input_package_gives_the_input_and_its_main_program() -> None:
+    assert decode(ExeOf(InputProg("nix-demo", "daemon"))) == STORE + "daemon-input/bin/daemon-bin"
+
+
+@needs_nix
+def test_exe_of_a_pinned_package_gives_the_pin() -> None:
+    assert decode(ExeOf(NixpkgsProg("old", "daemon"))) == STORE + "daemon-old/bin/daemon-old-bin"
+
+
+@needs_nix
+def test_exe_of_a_package_of_pkgs_gives_its_main_program() -> None:
+    assert decode(ExeOf(Package("ripgrep"))) == STORE + "ripgrep/bin/rg"
+
+
+@needs_nix
+def test_exe_of_a_native_value_gives_the_main_program_of_the_package_that_the_file_returns(tmp_path: Path) -> None:
+    (tmp_path / "pkg.nix").write_text(DAEMON_FILE)
+    assert decode(ExeOf(Native("pkg.nix", ["daemon"])), tmp_path) == STORE + "daemon-input/bin/daemon-bin"
+
+
+@needs_nix
+def test_exe_of_is_a_part_of_a_text_with_a_trailing_argument(tmp_path: Path) -> None:
+    (tmp_path / "pkg.nix").write_text(DAEMON_FILE)
+    assert (
+        decode(Text(ExeOf(Native("pkg.nix", ["daemon"])), " --a"), tmp_path)
+        == STORE + "daemon-input/bin/daemon-bin --a"
+    )
+    assert decode(Text(ExeOf(InputProg("nix-demo", "daemon")), " --a")) == STORE + "daemon-input/bin/daemon-bin --a"
+
+
+@needs_nix
+def test_exe_of_an_unknown_input_package_gives_the_plain_unknown_package_line() -> None:
+    line = "nixdantic: test.py:1: unknown package `nope`: the input `nix-demo` has no such package"
+    assert line in decode(ExeOf(InputProg("nix-demo", "nope")))
+
+
+@needs_nix
+def test_exe_of_a_native_value_that_is_a_set_fails_with_a_plain_line(tmp_path: Path) -> None:
+    (tmp_path / "set.nix").write_text('{ tools = { a = "b"; }; }')
+    line = "nixdantic: test.py:1: `exe_of` needs a package, but the native value `set.nix` gives a set"
+    assert line in decode(ExeOf(Native("set.nix")), tmp_path)
+
+
+@needs_nix
+def test_the_old_exe_kind_is_unchanged_by_exe_of() -> None:
+    assert Exe("ripgrep").model_dump() == {"kind": "exe", "attr": "ripgrep"}
+    assert decode(Exe("ripgrep")) == STORE + "ripgrep/bin/rg"

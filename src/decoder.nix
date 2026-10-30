@@ -7,6 +7,8 @@
 #   - the reference kinds "input_package" (SG42a) and "nixpkgs_package" (SG44): a package of a flake input, and a
 #     package of a nixpkgs pinned by commit. Both read `inputs` from the special arguments.
 #   - the reference kind "exe": the main program of a package, `lib.getExe pkgs.ATTR` (`Exe`, `pynix_pkgs`);
+#   - the reference kind "exe_of": the main program of any package reference, `lib.getExe` of the decoded `of`
+#     (`ExeOf`, `nixdantic`). It fails when `of` is not a derivation;
 #   - the reference kind "native" (PF-5, PF-8): a function gets the module arguments that it names. A whole-value
 #     reference (empty `attr`) calls only a function that names an argument, so an overlay `final: prev:` stays a function.
 #   - the reference kinds "priority" and "order" (L128): `Force(v)` is `lib.mkOverride 50`, `Before(v)` is `lib.mkOrder 500`.
@@ -60,6 +62,14 @@ let
     in if !builtins.isFunction value then value
        else if ref.attr != [ ] || names != { } then call
        else value;
+  # `ExeOf(of)`: the main program of the package that `of` gives. A value that is not a derivation fails here,
+  # with the line of the learner, because `lib.getExe` would fail later with a message about `meta`.
+  exeOf = ref:
+    let
+      p = decode { __nixdantic_ref__ = ref.of; };
+      name = if ref.of.kind == "native" then "the native value `${ref.of.file}`" else "`${ref.of.attr}`";
+    in if lib.isDerivation p then lib.getExe p
+       else fail "`exe_of` needs a package, but ${name} gives a ${builtins.typeOf p}";
   decode = value:
     if builtins.isList value then map decode value
     else if !builtins.isAttrs value then value
@@ -68,6 +78,7 @@ let
       let ref = value.__nixdantic_ref__;
       in if ref.kind == "package" then package ref.attr
          else if ref.kind == "exe" then lib.getExe (package ref.attr)
+         else if ref.kind == "exe_of" then exeOf ref
          else if ref.kind == "with_packages" then withPackages ref
          else if ref.kind == "input_package" then inputPackage ref
          else if ref.kind == "nixpkgs_package" then nixpkgsPackage ref

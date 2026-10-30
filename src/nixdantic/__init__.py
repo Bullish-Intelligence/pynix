@@ -35,7 +35,16 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args, get_origin
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, JsonValue, PrivateAttr, ValidationError, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    JsonValue,
+    PrivateAttr,
+    SerializeAsAny,
+    ValidationError,
+    model_validator,
+)
 from pydantic_core import PydanticCustomError, core_schema
 
 __all__ = [
@@ -43,6 +52,7 @@ __all__ = [
     "Before",
     "ConfigRef",
     "Default",
+    "ExeOf",
     "Expect",
     "Force",
     "JsonValue",
@@ -167,19 +177,37 @@ class PathRef(Reference):
     file: str
 
 
+class ExeOf(Reference):
+    """The main program of any package reference: Nix resolves it with `lib.getExe`.
+
+    `of` is a `Package`, an `InputPkg`, a `NixpkgsPkg` (or a `Prog` of those), or a `Native` that gives a package.
+    `ExeOf(InputProg("nix-demo", "daemon"))` is the main program of the package of the input, not of `pkgs`.
+    The decoder fails when `of` is not a package. The older kind `exe` (`Exe`) takes only an attribute of `pkgs`.
+    """
+
+    _positional: ClassVar[tuple[str, ...]] = ("of",)
+    kind: Literal["exe_of"] = "exe_of"
+    # `SerializeAsAny` keeps the fields of a subclass (`input`, `nixpkgs`) in the JSON.
+    of: SerializeAsAny[Package] | SerializeAsAny[Native]
+
+    if TYPE_CHECKING:
+
+        def __init__(self, of: Package | Native) -> None: ...
+
+
 class Text(Reference):
     """A string that holds references. Each part is literal text or a reference.
 
     `Text(Package(attr="hello"), "/bin/hello")` is the Nix string `"${pkgs.hello}/bin/hello"`. The string keeps
     the context of the package, so the package stays a dependency of the system. A string part is always
-    literal: Nix does not read `${...}` in it. A reference part is a `Package`, a `ConfigRef`, a `Native`, or
-    another `Text`.
+    literal: Nix does not read `${...}` in it. A reference part is a `Package`, a `ConfigRef`, a `Native`, a `PathRef`,
+    an `ExeOf`, or another `Text`.
     """
 
     kind: Literal["text"] = "text"
-    parts: list[str | Package | ConfigRef | Native | PathRef | Text]
+    parts: list[str | Package | ConfigRef | Native | PathRef | ExeOf | Text]
 
-    def __init__(self, *parts: str | Package | ConfigRef | Native | PathRef | Text) -> None:
+    def __init__(self, *parts: str | Package | ConfigRef | Native | PathRef | ExeOf | Text) -> None:
         super().__init__(parts=list(parts))
 
     # Pydantic calls a custom `__init__` with the keys of every dict that it validates against `Text`. That broke
