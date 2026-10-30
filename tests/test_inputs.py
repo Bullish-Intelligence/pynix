@@ -452,3 +452,164 @@ def test_the_wheel_needs_no_nix_folder() -> None:
         "shutil",
         "",
     }
+
+
+# ---- the Python code of an input (`Input(python="src")`) ---------------------------------------------------------------
+
+PYTHON_INPUT = ROOT / "tests" / "fixtures" / "inputs" / "python" / "ok"
+HASH = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+
+def source(folder: Path, flake: bool) -> str:
+    """The Nix text of an input object that holds `folder`: a copy in the store, as a locked input has it."""
+    kind = '_type = "flake";' if flake else ""
+    return f'{{ {kind} narHash = "{HASH}"; outPath = builtins.path {{ path = "{folder}"; name = "pyin"; }}; }}'
+
+
+def python_call(inputs: dict[str, tuple[Path, bool, str]]) -> str:
+    """A call with the given inputs: NAME to (folder, is a flake, `python` folder)."""
+    objects = " ".join(f"{name} = {source(folder, flake)};" for name, (folder, flake, _) in inputs.items())
+    dirs = " ".join(f'{name} = "{rel}";' for name, (_, _, rel) in inputs.items())
+    return f"(call {{ inputs = {{ {objects} }}; pythonDirs = {{ {dirs} }}; }})"
+
+
+def tree(folder: Path, files: dict[str, str]) -> Path:
+    for name, text in files.items():
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_text(text)
+    return folder
+
+
+@pytest.fixture(scope="module")
+def python_inputs() -> Path:
+    """A flake and a plain source, both with code: the folder `src` and the root of the source."""
+    return build(python_call({"flk": (PYTHON_INPUT, True, "src"), "plain": (PYTHON_INPUT, False, ".")}))
+
+
+def test_the_entries_of_a_python_folder_are_linked(python_inputs: Path) -> None:
+    # `src` of the flake holds the package `alpha`, the module `beta`, and the things that Pynix ignores. The plain source
+    # gives the module `rootmod` of its root (its folder `src` has no `__init__.py`, so it is not a package).
+    assert sorted(p.name for p in python_inputs.iterdir()) == [
+        "alpha",
+        "beta.py",
+        "pynix_flk",
+        "pynix_plain",
+        "rootmod.py",
+    ]
+    assert (python_inputs / "alpha" / "sub.py").is_file()
+
+
+def test_python_code_imports_through_the_output(python_inputs: Path) -> None:
+    done = python(
+        python_inputs,
+        "import alpha, alpha.sub, beta, rootmod\n"
+        "print(alpha.NAME, alpha.sub.VALUE, beta.NAME, rootmod.NAME)\n"
+        "for name in ('_hidden', 'notes', 'my_mod', 'README'):\n"
+        "    try:\n"
+        "        __import__(name)\n"
+        "    except ImportError:\n"
+        "        continue\n"
+        "    raise SystemExit(name + ' imports')\n",
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "alpha 7 beta rootmod"
+
+
+def test_a_plain_source_gets_a_record_for_the_pair_check(python_inputs: Path) -> None:
+    text = (python_inputs / "pynix_plain" / "_generation.py").read_text()
+    assert read_source(python_inputs / "pynix_plain" / "_generation.py") == {
+        "input": "plain",
+        "narHash": HASH,
+        "modules": "",
+        "generator": evaluate("(call { }).passthru.generator"),
+        "nixpkgs": evaluate("nixpkgs.rev"),
+    }
+    assert "SOURCE" in text
+    assert (python_inputs / "pynix_plain" / "py.typed").is_file()
+
+
+def test_a_plain_source_without_python_has_no_package() -> None:
+    assert (
+        evaluate(f"builtins.attrNames (call {{ inputs.plain = {source(PYTHON_INPUT, False)}; }}).passthru.parts") == []
+    )
+
+
+def test_a_python_name_is_refused_when_two_inputs_give_it(tmp_path: Path) -> None:
+    other = tree(tmp_path / "other", {"src/alpha.py": ""})
+    message = refused(python_call({"one": (PYTHON_INPUT, True, "src"), "two": (other, False, "src")}) + ".name")
+    assert "error: pynix input packages: two inputs give the Python name `alpha`: `one` and `two`" in message
+
+
+def test_a_python_name_is_refused_when_one_input_gives_it_twice(tmp_path: Path) -> None:
+    both = tree(tmp_path / "both", {"src/alpha/__init__.py": "", "src/alpha.py": ""})
+    message = refused(python_call({"one": (both, True, "src")}) + ".name")
+    assert (
+        "error: pynix input packages: the input `one` gives the Python name `alpha` twice (a folder and a module)"
+        in message
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "pynix",
+        "pynix_os",
+        "pynix_anything",
+        "nixdantic",
+        "pydantic",
+        "pydantic_core",
+        "annotated_types",
+        "typing_extensions",
+        "typing_inspection",
+        "minix",
+        "minix_config",
+        "basix",
+        "basix_config",
+    ],
+)
+def test_a_reserved_python_name_is_refused(tmp_path: Path, name: str) -> None:
+    code = tree(tmp_path / "code", {f"src/{name}.py": ""})
+    message = refused(python_call({"bad": (code, False, "src")}) + ".name")
+    assert f"error: pynix input packages: the Python name `{name}` of the input `bad` is reserved" in message
+
+
+def test_a_missing_python_folder_is_refused() -> None:
+    message = refused(python_call({"bad": (PYTHON_INPUT, True, "nope")}) + ".name")
+    assert "error: pynix input packages: the input `bad` has no folder `nope` (Input python=...)" in message
+
+
+def test_a_python_folder_that_is_a_file_is_refused() -> None:
+    message = refused(python_call({"bad": (PYTHON_INPUT, True, "rootmod.py")}) + ".name")
+    assert "error: pynix input packages: the input `bad` has no folder `rootmod.py` (Input python=...)" in message
+
+
+def test_a_python_folder_without_an_entry_is_refused(tmp_path: Path) -> None:
+    code = tree(
+        tmp_path / "code", {"src/README.md": "", "src/notes/a.txt": "", "src/_private.py": "", "src/x-y.py": ""}
+    )
+    message = refused(python_call({"bad": (code, True, "src")}) + ".name")
+    assert (
+        "error: pynix input packages: the folder `src` of the input `bad` holds no Python package or module" in message
+    )
+
+
+def test_a_python_dir_for_an_unknown_input_is_refused() -> None:
+    message = refused('(call { pythonDirs.ghost = "src"; }).name')
+    assert "error: pynix input packages: `python` names the input `ghost`, but the entry has no such input" in message
+
+
+@pytest.mark.parametrize("flake", [True, False])
+def test_a_standard_library_name_fails_the_build(tmp_path: Path, flake: bool) -> None:
+    code = tree(tmp_path / "code", {"src/json/__init__.py": "", "src/fine.py": ""})
+    done = nix("build", python_call({"bad": (code, flake, "src")}), "--no-link")
+    assert done.returncode != 0
+    assert "pynix input packages: the Python name `json` of the input `bad` is in the standard library" in done.stderr
+    assert "`fine`" not in done.stderr
+
+
+def test_a_flake_with_modules_gives_options_and_python_code() -> None:
+    out = build('(call { modules.fixture = [ "fixture" ]; pythonDirs.fixture = "."; })')
+    assert (package(out) / "services" / "fixture.py").is_file()
+    done = python(out, "import fixturepy\nprint(fixturepy.NAME)\n")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "fixturepy"

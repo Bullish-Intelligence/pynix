@@ -24,8 +24,15 @@
 # A named nixpkgs (`NixpkgsPin(name, commit)`, 009-D53, 009-D54) is not an input with options. The argument `nixpkgsInputs`
 # gives it a name list `pynix_nixpkgs_NAME` (`src/pynix/gen_nixpkgs.py`), so `NAME.pkgs.PACKAGE` finds its packages.
 #
-# An input that is not a flake (`flake = false`) gets no package. An input with no module in `modules` (or with an
-# empty list) declares no option: its package holds the name stub only (SG44).
+# An input that is not a flake (`flake = false`) gets no package, unless `pythonDirs` names it (see below). An input with no
+# module in `modules` (or with an empty list) declares no option: its package holds the name stub only (SG44).
+#
+# Python code of an input: `pythonDirs = { NAME = "src"; }` (`Input(python="src")`). Each package (a folder with `__init__.py`)
+# and each module (`x.py`) of that folder is linked into the output, next to `pynix_NAME`. The input may be a flake or not.
+# A name must be a Python identifier that does not start with `_`; other files and folders are ignored. The evaluation fails
+# when two inputs give the same name, when a name is reserved (`pynix`, `pynix_*`, `nixdantic`, `pydantic`, `pydantic_core`,
+# `annotated_types`, `typing_extensions`, `typing_inspection`, `minix`, `minix_config`, `basix`, `basix_config`), when the
+# folder is missing, or when it holds no entry. The build fails when a name is in the standard library.
 {
   # The pkgs of the layer. The modules evaluate with it, as the machine does.
   pkgs,
@@ -38,6 +45,9 @@
   # { NAME = <flake input object of `nixpkgs-NAME`>; }: the nixpkgs pins of the entry (`NixpkgsPin(name, commit)`), keyed by
   # the name without the prefix `nixpkgs-`. Each gets the package-name list `pynix_nixpkgs_NAME`. Not an input of `inputs`.
   nixpkgsInputs ? { },
+  # { NAME = "src"; }: the folder of each input that holds Python code (`Input(python="src")`; "." is the input root). The
+  # packages and modules of that folder are linked into the output next to `pynix_NAME`, so the entry can import them.
+  pythonDirs ? { },
   # The nixpkgs flake input of the layer. It gives the `nixpkgs` commit of an input that has no nixpkgs input.
   nixpkgs ? null,
   # The home-manager flake input (needed for layer "home-manager"; its `lib.homeManagerConfiguration` is the base).
@@ -164,6 +174,99 @@ let
     in
     walk tree;
 
+  # ---- the Python packages of an input ------------------------------------------------------------------------------
+  # `Input(python="src")` names a folder of the input. An entry of that folder is a package (a folder with `__init__.py`)
+  # or a module (`NAME.py`). NAME must be a Python identifier that does not start with `_`. Other files and folders are
+  # ignored. The output links each entry, so the entry of the learner can import it. The output is on `sys.path` before
+  # the standard library, so a name that hides another module is an error, never a surprise.
+  reservedNames = [
+    "pynix" "nixdantic" "pydantic" "pydantic_core" "annotated_types" "typing_extensions" "typing_inspection"
+    "minix" "minix_config" "basix" "basix_config"
+  ];
+  isReserved = n: lib.elem n reservedNames || lib.hasPrefix "pynix_" n;
+  isName = n: builtins.match "[A-Za-z][A-Za-z0-9_]*" n != null;
+
+  # One scan for each input: { error, entries }. `error` is null or the text of the first problem.
+  scanPython =
+    name:
+    let
+      fail = text: {
+        error = "pynix input packages: ${text}";
+        entries = [ ];
+      };
+      rel = pythonDirs.${name};
+      root = toString inputs.${name}.outPath;
+      dir = if rel == "." then root else "${root}/${rel}";
+      entryOf =
+        file: type:
+        let
+          base = lib.removeSuffix ".py" file;
+        in
+        if (type == "regular" || type == "symlink") && lib.hasSuffix ".py" file && isName base then
+          [ { n = base; inherit file; } ]
+        else if (type == "directory" || type == "symlink") && isName file && builtins.pathExists "${dir}/${file}/__init__.py" then
+          [ { n = file; inherit file; } ]
+        else
+          [ ];
+      found = lib.concatLists (lib.mapAttrsToList entryOf (builtins.readDir dir));
+    in
+    if !(inputs ? ${name}) then
+      fail "`python` names the input `${name}`, but the entry has no such input"
+    else if !(builtins.pathExists dir && builtins.readFileType dir == "directory") then
+      fail "the input `${name}` has no folder `${rel}` (Input python=...)"
+    else if found == [ ] then
+      fail "the folder `${rel}` of the input `${name}` holds no Python package or module"
+    else
+      {
+        error = null;
+        entries = map (e: e // { input = name; inherit dir; }) found;
+      };
+  pyScans = lib.genAttrs (lib.attrNames pythonDirs) scanPython;
+  entriesOf = name: pyScans.${name}.entries;
+  pyEntries = lib.concatMap entriesOf (lib.attrNames pyScans);
+  pyByName = lib.groupBy (e: e.n) pyEntries;
+  # The first problem of all inputs together, or null. `throw` runs at one point only: `pyChecked`.
+  pyProblem =
+    let
+      scanErrors = lib.filter (e: e != null) (map (s: s.error) (lib.attrValues pyScans));
+      clash = lib.filter (n: lib.length (lib.unique (map (e: e.input) pyByName.${n})) > 1) (lib.attrNames pyByName);
+      twice = lib.filter (n: lib.length pyByName.${n} > 1) (lib.attrNames pyByName);
+      reserved = lib.filter (e: isReserved e.n) pyEntries;
+      problems =
+        scanErrors
+        ++ map (
+          n:
+          "pynix input packages: two inputs give the Python name `${n}`: "
+          + lib.concatMapStringsSep " and " (i: "`${i}`") (lib.unique (map (e: e.input) pyByName.${n}))
+        ) clash
+        ++ map (
+          n: "pynix input packages: the input `${(lib.head pyByName.${n}).input}` gives the Python name `${n}` twice (a folder and a module)"
+        ) twice
+        ++ map (e: "pynix input packages: the Python name `${e.n}` of the input `${e.input}` is reserved") reserved;
+    in
+    if problems == [ ] then null else lib.head problems;
+  pyChecked = if pyProblem == null then true else throw pyProblem;
+
+  # Shell: refuse a name of the standard library. Only the build Python knows `sys.stdlib_module_names`.
+  checkPython =
+    name:
+    lib.optionalString (pythonDirs ? ${name}) ''
+      ${python}/bin/python -I - ${lib.escapeShellArg name} ${lib.escapeShellArgs (map (e: e.n) (entriesOf name))} <<'PY'
+      import sys
+
+      bad = [n for n in sys.argv[2:] if n in sys.stdlib_module_names]
+      for n in bad:
+          print(f"pynix input packages: the Python name `{n}` of the input `{sys.argv[1]}` is in the standard library", file=sys.stderr)
+      sys.exit(1 if bad else 0)
+      PY
+    '';
+  # Shell: link each entry of the input into $out.
+  linkPython =
+    name:
+    lib.concatMapStringsSep "\n" (
+      e: "ln -s ${lib.escapeShellArg "${e.dir}/${e.file}"} \"$out\"/${lib.escapeShellArg e.file}"
+    ) (if pythonDirs ? ${name} then entriesOf name else [ ]);
+
   # ---- one input ---------------------------------------------------------------------------------------------------
   nixpkgsCommit =
     name: input:
@@ -234,6 +337,7 @@ let
         passthru = { inherit manifest source; };
       }
       ''
+        ${checkPython name}
         export PYTHONDONTWRITEBYTECODE=1 PYTHONSAFEPATH=1 PYTHONPATH=${generatorTree}
         mkdir -p "$out"
         python -m pynix.gen_input ${json "manifest" manifest} ${json "packages" (lib.genAttrs pkgNames meta)} \
@@ -243,7 +347,37 @@ let
           export RUFF_CACHE_DIR="$TMPDIR/ruff"
           ruff format --quiet --line-length 120 --no-cache "$out"
         ''}
+        ${linkPython name}
       '';
+
+  # An input that is not a flake but gives Python packages (`flake = false` with `python`). It has no option to type, so its
+  # package `pynix_NAME` holds the record for the pair check only. The links come next to it.
+  onePlain =
+    name: input:
+    let
+      source =
+        {
+          input = name;
+          inherit (input) narHash;
+          modules = "";
+          generator = generatorId;
+        }
+        // lib.optionalAttrs (input ? rev) { inherit (input) rev; }
+        // lib.optionalAttrs (nixpkgsCommit name input != null) { nixpkgs = nixpkgsCommit name input; };
+      pkg = "pynix_" + lib.replaceStrings [ "-" ] [ "_" ] name;
+    in
+    pkgs.runCommand "pynix-${name}" { passthru = { inherit source; }; } ''
+      ${checkPython name}
+      mkdir -p "$out/${pkg}"
+      touch "$out/${pkg}/py.typed"
+      echo '"""This input gives Python packages only. Generated; do not edit."""' > "$out/${pkg}/__init__.py"
+      cat > "$out/${pkg}/_generation.py" <<'EOF'
+      """The source of this generated package."""
+
+      SOURCE: dict[str, str] = ${builtins.toJSON source}
+      EOF
+      ${linkPython name}
+    '';
 
   # ---- one named nixpkgs ---------------------------------------------------------------------------------------------
   # The package-name list of a pinned nixpkgs. `nixpkgs-names.nix` reads `legacyPackages` and the lock node of the input.
@@ -272,21 +406,25 @@ let
         cat "$TMPDIR/summary.json"
       '';
 
-  # An input that is not a flake has no module to type (009-D52).
+  # An input that is not a flake has no module to type (009-D52). It gets a package only when it gives Python code.
   flakes = lib.filterAttrs (_: v: (v._type or null) == "flake") inputs;
+  plains = lib.filterAttrs (n: v: (v._type or null) != "flake" && pythonDirs ? ${n}) inputs;
   # The key of a name list cannot meet the key of an input: the prefix `nixpkgs-` is not a valid input name (it is taken).
-  parts = lib.mapAttrs one flakes // lib.mapAttrs' (n: v: lib.nameValuePair "nixpkgs-${n}" (oneNixpkgs n v)) nixpkgsInputs;
+  parts =
+    lib.mapAttrs one flakes
+    // lib.mapAttrs onePlain plains
+    // lib.mapAttrs' (n: v: lib.nameValuePair "nixpkgs-${n}" (oneNixpkgs n v)) nixpkgsInputs;
 in
 if !(lib.elem layer [ "nixos" "home-manager" ]) then
   throw ''pynix input packages: layer must be "nixos" or "home-manager", found "${layer}"''
 else if layer == "home-manager" && baseModules == null && homeManager == null then
   throw ''pynix input packages: layer "home-manager" needs the argument `homeManager` (the home-manager flake)''
 else
-  pkgs.symlinkJoin {
+  lib.seq pyChecked (pkgs.symlinkJoin {
     name = "pynix-inputs";
     paths = lib.attrValues parts;
     passthru = {
       generator = generatorId;
       inherit parts;
     };
-  }
+  })
