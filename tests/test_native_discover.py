@@ -96,6 +96,45 @@ def test_inline_nixpkgs_and_flake_false() -> None:
     assert found.to_json()["inputs"][0]["nixpkgs"] == {"name": "old", "commit": OLD}
 
 
+def test_the_python_folder_is_read() -> None:
+    found = discover_source(
+        'Input("a", "github:a/b", python="src")\nInput("b", "github:a/b", flake=False, python=".")\n'
+    )
+    assert [i.python for i in found.inputs] == ["src", "."]
+    assert [i.get("python") for i in found.to_json()["inputs"]] == ["src", "."]
+
+
+def test_json_has_python_only_when_the_input_sets_it() -> None:
+    found = discover_source('Input("a", "github:a/b")\nInput("b", "github:a/b", python=None)\n')
+    assert [i.python for i in found.inputs] == [None, None]
+    assert all("python" not in i for i in found.to_json()["inputs"])
+
+
+def test_json_with_python_equals_the_json_of_the_objects() -> None:
+    made = Input("a", "github:a/b", modules=["m"], python="lib/py")
+    found = discover_source('Input("a", "github:a/b", modules=["m"], python="lib/py")\n')
+    have = [{k: v for k, v in i.items() if k != "source"} for i in found.to_json()["inputs"]]
+    assert have == [{k: v for k, v in input_json(made, "x").items() if k != "source"}]
+
+
+def test_a_python_folder_that_is_not_plain_text_is_refused() -> None:
+    assert fails('Input("a", "github:a/b", python=folder)\n') == (
+        "system.py:1:1: Input(...) takes plain text and True or False only"
+    )
+    assert fails('Input("a", "github:a/b", python="s" + "rc")\n') == (
+        "system.py:1:1: Input(...) takes plain text and True or False only"
+    )
+    assert fails('Input("a", "github:a/b", python=5)\n') == "system.py:1:33: Input.python must be text, found 5."
+
+
+@pytest.mark.parametrize("folder", ["/src", "../src", "a/../b", ""])
+def test_a_bad_python_folder_is_refused(folder: str) -> None:
+    assert fails(f'Input("a", "github:a/b", python="{folder}")\n') == (
+        'system.py:1:33: Input.python must be a folder below the input, such as "src" or "." for the input root '
+        f'(no leading "/", no ".."), found "{folder}".'
+    )
+
+
 def test_attribute_calls_are_read() -> None:
     text = f'import m\nold = m.NixpkgsPin("old", "{OLD}")\nm.Input("a", "github:a/b", nixpkgs=old)\nm.Input("b", "github:a/b", nixpkgs=m.OWN)\n'
     found = discover_source(text)

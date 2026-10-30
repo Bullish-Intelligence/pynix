@@ -55,6 +55,16 @@ def _module_name(value: str) -> str:
     return value
 
 
+def _python_dir(value: str) -> str:
+    # A folder below the input that holds Python code: ".", "src", "lib/py". No leading "/", no "..", no hidden folder.
+    if value != "." and not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*", value):
+        raise PydanticCustomError(
+            "python_dir",
+            'must be a folder below the input, such as "src" or "." for the input root (no leading "/", no "..")',
+        )
+    return value
+
+
 def _input_url(value: str) -> str:
     # The URL goes into Nix text (a generated flake). Allow only the characters of a flake reference.
     if not re.fullmatch(r"[A-Za-z0-9+._:/?&=@%~#,-]+", value) or ":" not in value:
@@ -83,6 +93,19 @@ class Input(BaseModel):
     modules: list[Annotated[str, AfterValidator(_module_name)]] = []
     """The modules of the input to import (`inputs.NAME.nixosModules.MODULE`; `homeManagerModules` on Home Manager), for example ["nirinit"]. Typed classes of `pynix_NAME` need the module."""
 
+    python: Annotated[str, AfterValidator(_python_dir)] | None = None
+    """The folder of the input that holds Python code, for example "src" ("." is the input root). The entry can import the packages and modules of that folder.
+
+    A package is a folder with `__init__.py`. A module is a file `NAME.py`. NAME must be a Python identifier that does not start with `_`.
+    Pynix ignores all other files, and a folder with no `__init__.py`. The compile fails when two inputs give the same name,
+    when a name is reserved (`pynix`, `pynix_*`, `nixdantic`, `pydantic`, `pydantic_core`, `annotated_types`, `typing_extensions`,
+    `typing_inspection`, `minix`, `minix_config`, `basix`, `basix_config`) or is in the standard library, when the folder does not
+    exist, or when the folder holds no package or module. The input can be a flake or not (`flake=False`).
+
+    The code can import the standard library, `pydantic`, `nixdantic`, `pynix_pkgs`, and `pynix_native`, and the libraries of its
+    layer (`minix_config` and `pynix_hm`; `basix_config` and `pynix_os`). Other third-party packages are not available.
+    `flake.lock` pins the code. It changes after an update of the input only."""
+
     if TYPE_CHECKING:
 
         def __init__(
@@ -93,6 +116,7 @@ class Input(BaseModel):
             *,
             modules: list[str] = [],  # noqa: B006
             flake: bool = True,
+            python: str | None = None,
             nixpkgs: NixpkgsPin | Own | None = None,
         ) -> None:
             """One extra flake input.
@@ -102,6 +126,7 @@ class Input(BaseModel):
                 url: The flake reference, for example "github:amaanq/nirinit".
                 modules: The modules of the input to import, for example ["nirinit"].
                 flake: False for a source that is not a flake.
+                python: The folder of the input with Python code, for example "src". The entry can import its packages and modules.
                 nixpkgs: The nixpkgs of the input: left out, the nixpkgs of the layer; `OWN`, its own lock; or a `NixpkgsPin(...)`.
             """
             ...
@@ -117,6 +142,8 @@ class Input(BaseModel):
 def input_json(item: Input, where: str) -> dict[str, object]:
     """The compiled JSON of one `Input`. The key `nixpkgs` is absent when it is left out."""
     out: dict[str, object] = item.model_dump()
+    if item.python is None:
+        del out["python"]
     chosen = item.nixpkgs
     if chosen is None:
         del out["nixpkgs"]

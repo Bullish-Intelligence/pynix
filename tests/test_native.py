@@ -132,6 +132,33 @@ def test_input_json_with_a_nixpkgs() -> None:
     assert out["flake"] is False
 
 
+@pytest.mark.parametrize("folder", ["src", ".", "python", "lib/py", "a-b/c.d", "_x/y_z"])
+def test_input_takes_a_python_folder(folder: str) -> None:
+    assert Input("x", "github:a/b", python=folder).python == folder
+
+
+def test_input_has_no_python_folder_by_default() -> None:
+    assert Input("x", "github:a/b").python is None
+    assert Input("x", "github:a/b", python=None).python is None
+
+
+@pytest.mark.parametrize(
+    "folder", ["", "/src", "/", "..", "../src", "src/..", "a/../b", "a//b", "src/", "./src", ".hidden", "a b", "a'b"]
+)
+def test_input_refuses_a_python_folder(folder: str) -> None:
+    error = first_error(lambda: Input("x", "github:a/b", python=folder))
+    assert error["loc"] == ("python",)
+    assert error["msg"] == (
+        'must be a folder below the input, such as "src" or "." for the input root (no leading "/", no "..")'
+    )
+
+
+def test_input_json_has_python_only_when_it_is_set() -> None:
+    assert "python" not in input_json(Input("x", "github:a/b"), "system.py:5")
+    assert input_json(Input("x", "github:a/b", python="src"), "system.py:5")["python"] == "src"
+    assert input_json(Input("x", "github:a/b", flake=False, python="."), "system.py:5")["python"] == "."
+
+
 def test_own_is_one_value() -> None:
     assert repr(OWN) == "OWN"
 

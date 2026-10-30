@@ -150,9 +150,16 @@ def check_pairs(
     command: str,
     generator: str | None = None,
 ) -> list[Pair]:
-    """Check every `NixpkgsPin` name list, then every input package of an entry. An input with `flake=False` has no package."""
+    """Check every `NixpkgsPin` name list, then every input package of an entry.
+
+    An input with `flake=False` has a package only when it sets `python`.
+    """
     pairs = [check_nixpkgs(pin, lock, packages_dir, command) for pin in found.nixpkgs]
-    pairs += [check_input(item, lock, packages_dir, command, generator) for item in found.inputs if item.flake]
+    pairs += [
+        check_input(item, lock, packages_dir, command, generator)
+        for item in found.inputs
+        if item.flake or item.python is not None
+    ]
     return pairs
 
 

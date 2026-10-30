@@ -16,7 +16,7 @@ from typing import Any
 
 from pydantic_core import PydanticCustomError
 
-from .inputs import _input_name, _input_url, _module_name
+from .inputs import _input_name, _input_url, _module_name, _python_dir
 from .nixpkgs import _commit, _nixpkgs_name
 
 __all__ = ["DiscoveryError", "Found", "FoundInput", "FoundNixpkgsPin", "discover", "discover_source"]
@@ -54,6 +54,7 @@ class FoundInput:
     nixpkgs: FoundNixpkgsPin | str | None
     label: str
     line: int
+    python: str | None = None
 
     @property
     def source(self) -> str:
@@ -62,6 +63,8 @@ class FoundInput:
     def to_json(self) -> dict[str, Any]:
         """The keys of `pynix_native.input_json`. The key `nixpkgs` is absent when the call leaves it out."""
         out: dict[str, Any] = {"name": self.name, "url": self.url, "flake": self.flake, "modules": list(self.modules)}
+        if self.python is not None:
+            out["python"] = self.python
         if isinstance(self.nixpkgs, FoundNixpkgsPin):
             out["nixpkgs"] = {"name": self.nixpkgs.name, "commit": self.nixpkgs.commit}
         elif self.nixpkgs is not None:
@@ -176,7 +179,7 @@ class _Reader:
         )
 
     def input_call(self, call: ast.Call) -> FoundInput:
-        args = self.arguments(call, ("name", "url"), ("modules", "flake", "nixpkgs"))
+        args = self.arguments(call, ("name", "url"), ("modules", "flake", "nixpkgs", "python"))
         name = self.text(args["name"], call, "name", _input_name)
         url = self.text(args["url"], call, "url", _input_url)
         flake = True
@@ -205,8 +208,11 @@ class _Reader:
                         f"{self.where(args['modules'])}: Input.modules {error.message()}, found {_quote(item)}."
                     ) from None
                 modules.append(item)
+        python: str | None = None
+        if "python" in args and self.literal(args["python"], call) is not None:
+            python = self.text(args["python"], call, "python", _python_dir)
         chosen = self.nixpkgs_choice(args["nixpkgs"]) if "nixpkgs" in args else None
-        return FoundInput(name, url, flake, tuple(modules), chosen, self.label, call.lineno)
+        return FoundInput(name, url, flake, tuple(modules), chosen, self.label, call.lineno, python)
 
     def read(self) -> Found:
         self.read_nixpkgs()

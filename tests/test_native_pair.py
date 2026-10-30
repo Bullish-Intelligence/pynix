@@ -211,6 +211,27 @@ def test_an_input_with_flake_false_has_no_package(tmp_path: Path, w3: dict) -> N
     assert check_pairs(found, w3, tmp_path, "basix apply") == []
 
 
+def test_an_input_with_flake_false_and_python_is_checked(tmp_path: Path, w3: dict) -> None:
+    found = Found(
+        (FoundInput("pytuin", "path:/srv/example/inputs/pytuin", False, (), None, "system.py", 3, "src"),), ()
+    )
+    missing = check_pairs(found, w3, tmp_path, "basix apply", generator=GEN)
+    assert statuses(missing) == {"input:pytuin": "missing"}
+    make_all(tmp_path)
+    assert statuses(check_pairs(found, w3, tmp_path, "basix apply", generator=GEN)) == {"input:pytuin": "ok"}
+    assert statuses(check_pairs(found, w3, tmp_path, "basix apply", generator="input-gen-2")) == {
+        "input:pytuin": "regenerate"
+    }
+    moved = copy.deepcopy(w3)
+    moved["nodes"]["pytuin"]["locked"]["narHash"] = "sha256-moved"
+    stale = check_pairs(found, moved, tmp_path, "basix apply", generator=GEN)
+    assert statuses(stale) == {"input:pytuin": "stale"}
+    assert error_lines(stale) == [
+        "system.py:3: the package `pynix_pytuin` was made from another version of `pytuin` than flake.lock holds; "
+        "run `basix apply` to make it again"
+    ]
+
+
 def test_check_input_alone(tmp_path: Path, w3: dict, found) -> None:
     write(tmp_path, "pynix_nirinit", {"narHash": NIRINIT_HASH, "nixpkgs": OLD})
     pair = check_input(found.inputs[0], w3, tmp_path, "basix apply")
