@@ -537,6 +537,8 @@ class Model(Plain):
             node = rest.setdefault(head, _copy_tree(data[head]))
             found = _pop_path(node, path[1:])
             if found is not _MISSING:
+                if py in out and out[py] != found:  # the typed field and the nested form give two values
+                    raise PydanticCustomError("set_twice", "{text}", {"text": _twice(path)})
                 out[py] = found
         for head, node in rest.items():
             if node:
@@ -652,14 +654,25 @@ def _pop_path(node: dict[str, Any], path: tuple[str, ...]) -> Any:
     return found
 
 
-def _merge(result: dict[str, JsonValue], key: str, wire: JsonValue) -> None:
-    """Put `wire` at `result[key]`. Two sections of one name join key by key, so no key is lost."""
-    have = result.get(key)
+def _twice(path: tuple[str, ...]) -> str:
+    return f"{'.'.join(path)} is set twice: once as the typed field and once as an extra key, with unequal values."
+
+
+def _merge(result: dict[str, JsonValue], key: str, wire: JsonValue, path: tuple[str, ...] = ()) -> None:
+    """Put `wire` at `result[key]`. Two sections of one name join key by key, so no key is lost.
+
+    A leaf that is set twice with unequal values is a conflict: the error names the full key path.
+    """
+    where = (*path, key)
+    if key not in result:
+        result[key] = wire
+        return
+    have = result[key]
     if isinstance(have, dict) and isinstance(wire, dict) and not _is_wire_ref(have) and not _is_wire_ref(wire):
         for sub, item in wire.items():
-            _merge(have, sub, item)
-    else:
-        result[key] = wire
+            _merge(have, sub, item, where)
+    elif have != wire:
+        raise ValueError(_twice(where))
 
 
 def _is_wire_ref(wire: dict[str, JsonValue]) -> bool:
@@ -677,6 +690,8 @@ def supplied(value: object) -> JsonValue:
         names, paths = type(value).__nix_names__, type(value).__nix_paths__
         result: dict[str, JsonValue] = {}
         for key in sorted(value.model_fields_set):
+            if key not in type(value).model_fields:
+                continue  # an extra key: the loop below joins it with the typed fields
             item = getattr(value, key)
             if item is Unset:
                 continue

@@ -10,10 +10,13 @@ import inspect
 import pkgutil
 from typing import Any, ClassVar
 
+import pytest
+from pydantic import ValidationError
+
 import pynix_flake_parts
 import pynix_hm
 import pynix_os
-from nixdantic import Force, Model, Text, supplied
+from nixdantic import Force, Model, Text, _merge, supplied
 from pynix_hm.systemd.user import User_Services_Value as HmService
 
 
@@ -104,3 +107,37 @@ def test_every_freeform_class_with_typed_paths_joins() -> None:
         for part in path:
             node = node[part]
         assert node == "typed", cls
+
+
+def test_a_leaf_set_twice_with_unequal_values_raises() -> None:
+    with pytest.raises(ValidationError, match=r"Service\.Environment is set twice: once as the typed field"):
+        HmService(Service_Environment=["A=1"], Service={"Restart": "always", "Environment": ["B=2"]})
+
+
+def test_a_leaf_set_twice_after_validation_raises() -> None:
+    value = HmService.model_construct(Service_Environment=["A=1"], Service={"Environment": ["B=2"]})
+    with pytest.raises(ValueError, match=r"Service\.Environment is set twice: once as the typed field"):
+        supplied(value)
+
+
+def test_a_leaf_set_twice_with_equal_values_joins() -> None:
+    value = HmService(Service_Environment=["A=1"], Service={"Restart": "always", "Environment": ["A=1"]})
+    assert supplied(value) == {"Service": {"Environment": ["A=1"], "Restart": "always"}}
+
+
+def test_a_conflict_in_a_nested_dict_names_the_nested_path() -> None:
+    result: dict[str, Any] = {"Service": {"Limits": {"Nofile": 1, "Nproc": 2}}}
+    with pytest.raises(ValueError, match=r"Service\.Limits\.Nofile is set twice"):
+        _merge(result, "Service", {"Limits": {"Nproc": 2, "Nofile": 3}})
+
+
+def test_two_nested_dicts_join_key_by_key() -> None:
+    result: dict[str, Any] = {"Service": {"Limits": {"Nofile": 1}}}
+    _merge(result, "Service", {"Limits": {"Nproc": 2}, "Restart": "no"})
+    assert result == {"Service": {"Limits": {"Nofile": 1, "Nproc": 2}, "Restart": "no"}}
+
+
+def test_a_reference_leaf_against_a_plain_leaf_raises() -> None:
+    value = Section.model_construct(Service_ExecStart=Text("/bin/x"), Service={"ExecStart": "/bin/y"})
+    with pytest.raises(ValueError, match=r"Service\.ExecStart is set twice"):
+        supplied(value)
