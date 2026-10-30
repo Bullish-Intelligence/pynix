@@ -1,0 +1,26 @@
+{
+ "libraries": {
+  "flake-parts": {
+   "added": [],
+   "removed": [],
+   "renamed": [],
+   "type_changed": []
+  },
+  "home-manager": {
+   "added": [],
+   "removed": [],
+   "renamed": [],
+   "type_changed": []
+  },
+  "nixos": {
+   "added": [],
+   "removed": [],
+   "renamed": [],
+   "type_changed": []
+  }
+ },
+ "package_names": {
+  "added": [],
+  "removed": []
+ }
+}
