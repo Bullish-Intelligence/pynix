@@ -20,6 +20,39 @@ calls a function with the module arguments that it names. When `attr` is empty, 
 (`{ pkgs, ... }:`) and returns any other value as it is. Nix cannot tell `{ ... }:` from `final: prev:`, so the
 decoder returns a whole-value file `{ ... }:` as a function and does not call it.
 
+## Python code of an input
+
+`Input("tools", "github:me/tools", python="src")` makes the Python code of an input importable in the entry file
+(`system.py` or `home.py`). The input can be a flake or not (`flake=False`). `python` names a folder of the input.
+Use `"."` for the root of the input. The folder must not start with `/` and must not contain `..`.
+
+Pynix imports two kinds of entry from that folder:
+
+- a package: a folder with an `__init__.py`;
+- a module: a file `NAME.py`.
+
+NAME must be a Python identifier and must not start with `_`. Pynix ignores all other files, and a folder with no
+`__init__.py` (a folder of tests, for example). If `src` holds `tools/__init__.py`, the entry writes
+`from tools import thing`.
+
+The compile stops, with one line that names the input and the name, when:
+
+- two inputs give the same name, or one input gives it twice (`x/` and `x.py`);
+- a name is reserved: `pynix`, any `pynix_*`, `nixdantic`, `pydantic`, `pydantic_core`, `annotated_types`,
+  `typing_extensions`, `typing_inspection`, `minix`, `minix_config`, `basix`, `basix_config`;
+- a name is in the standard library of the build Python (`sys.stdlib_module_names`);
+- the folder does not exist in the input;
+- the folder holds no package and no module.
+
+The code can import the standard library, `pydantic`, `nixdantic`, `pynix_pkgs`, `pynix_native`, and the libraries
+of its layer (minix: `minix_config`, `pynix_hm`; Basix: `basix_config`, `pynix_os`). Other third-party packages are
+not available. `flake.lock` pins the code. It changes only after an update of the input.
+
+`nix/input-packages.nix` does the work. Its argument `pythonDirs = { NAME = "src"; }` links each entry into the
+output next to `pynix_NAME`. An input with `flake=False` and `python` also gets a `pynix_NAME` folder. That folder
+holds the record that the pair check compares with `flake.lock`. An input with `flake=False` and no `python` gets
+no package.
+
 The option walk (`nix/evaluate.nix`) reads the pinned inputs of `flake.nix`: nixpkgs, Home Manager (it follows
 nixpkgs), and flake-parts. `scripts/check_generated.sh` (in `test:full`) fails when `src/` differs from the
 output of the generators. `scripts/regenerate.sh` writes that output into `src/`.
