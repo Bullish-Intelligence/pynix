@@ -1,11 +1,11 @@
 {
-  "commit": "2923558fe70a8b0331cb1da6acdfaadbdf09eff5",
+  "commit": "83878441b4b573ebbcf1fec5f8078dddf47bca95",
   "gates": {
     "canaries": true,
     "file": "provenance/gates-summary.txt",
     "result": "result: PASS (11 of 11 checks pass)"
   },
-  "manifest tag": "manifests/pynix-v0.5.0",
+  "manifest tag": "manifests/pynix-v0.6.0",
   "manifests": {
     "flake-parts.json": "7b9292c936c69e58f2250d764c570cc463995343edc159b8218c35c8d9865039",
     "home-manager.json": "f29e022c38fbc740ebbea5d718768dede852101ad22c9797a5abde1cda504303",
@@ -28,7 +28,7 @@
       "rev": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8"
     }
   },
-  "tag": "pynix-v0.5.0",
+  "tag": "pynix-v0.6.0",
   "tools": {
     "pydantic": "2.13.4",
     "pydantic-core": "2.46.4",
@@ -39,8 +39,8 @@
   "trees": {
     "decoder": "f5c40ff9e5b0a09c7deadaf6bfb4019feba4543f",
     "generator": "97444c085bd19f68eb84e4d3d410f2882ba57865",
-    "runtime": "b8b58f06da19a145a9eb6b66e1dc66c3e552fe2f",
-    "src": "c132c6fcb05e2f31ddc96b1db613a14ae6660396"
+    "runtime": "53c0f0bcc6a5be2ae2797f9a2f0d2a04ba2e7217",
+    "src": "a479faffbe4dd1ea792273d1220ed9cc2371a3fc"
   },
-  "version": "0.5.0"
+  "version": "0.6.0"
 }
