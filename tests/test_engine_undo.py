@@ -4,9 +4,9 @@ import fcntl
 from pathlib import Path
 
 import pytest
-from test_engine_support import TOP_OLD, Setup, make_setup, minix_layer
+from test_engine_support import TOP_NEW, TOP_OLD, Setup, basix_layer, make_setup, minix_layer
 
-from pynix_engine import Result
+from pynix_engine import Result, Session
 
 
 @pytest.fixture
@@ -81,3 +81,17 @@ def test_undo_for_minix_uses_its_own_ref_and_words(s: Setup) -> None:
     assert list(s.git.refs) == ["refs/minix/dropped"]
     assert "minix did not apply" in s.lines[0]
     assert "refs/minix/dropped" in s.log("minix")
+
+
+def test_undo_runs_the_pin_check_after_the_build(s: Setup) -> None:
+    s.git.tree = s.git.head_tree = "tree-head"
+    s.git.restored_staged = ["system.py", "system.json"]
+    seen: list[tuple[str, list[str]]] = []
+
+    def check(session: Session, built: str) -> list[str]:
+        seen.append((built, s.trace()))
+        return ["warning: pins differ"]
+
+    assert s.engine(basix_layer(s.world, pin_check=check)).undo() == 0
+    assert seen == [(TOP_NEW, ["restore", "build"])]
+    assert "warning: pins differ" in s.lines

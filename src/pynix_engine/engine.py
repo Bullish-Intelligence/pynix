@@ -95,6 +95,7 @@ class Engine:
         if steps.stage(session) != tree:
             raise Fail(session.word("changed_build"), EXIT_CHANGED)
 
+        self._pin_check(session, built)
         plan = layer.plan(session, built)
         if plan.unchanged and not steps.staged_names(session):
             session.say(session.word("nothing"))
@@ -115,6 +116,19 @@ class Engine:
         else:
             steps.commit(session, steps.commit_message(names), ", ".join(names[:5]))
         return 0
+
+    def _pin_check(self, session: Session, built: str) -> None:
+        """Say the warning lines of `Layer.pin_check`. A warning never stops the apply, so no error leaves this method."""
+        check = self.layer.pin_check
+        if check is None:
+            return
+        try:
+            lines = [str(line) for line in check(session, built)]
+        except Exception as error:  # noqa: BLE001 - a warning must never break an apply
+            session.log(f"the pin check failed and was skipped: {type(error).__name__}: {error}")
+            return
+        for line in lines:
+            session.say(line)
 
     def _switch(self, session: Session, plan: Plan, on_fail: str) -> None:
         reason = steps.switch_and_check(session, plan)

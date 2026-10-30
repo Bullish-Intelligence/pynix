@@ -42,6 +42,8 @@
         # The input packages (009-D47): one derivation with `pynix_NAME/` for each extra flake input. Basix and minix call
         # it from their flakes. A consumer with `flake = false` calls `import "${pynix}/nix/input-packages.nix"` instead.
         lib.inputPackages = args: import ./nix/input-packages.nix args;
+        # The pins of the Python inputs (021-D3): `{ version; pins; }` for the layer to write as JSON. See `nix/pins.nix`.
+        lib.pythonPins = args: import ./nix/pins.nix args;
       };
 
       perSystem = { pkgs, system, ... }:

@@ -6,6 +6,7 @@
 - `InputPkg`, `InputProg`, `InputPackages`: the packages of an input (the runtime of a generated name stub).
 - `NixpkgsPkg`, `NixpkgsProg`, `NixpkgsPackages`: the packages of a `NixpkgsPin`, `old.pkgs.NAME`.
 - `pynix_native.pair`: the pair check of a generated package against `flake.lock`.
+- `pynix_native.pins`: the pin-mismatch warning between two workspaces that pin the same Python input (021-D3).
 """
 
 from .discover import DiscoveryError, Found, FoundInput, FoundNixpkgsPin, discover, discover_source

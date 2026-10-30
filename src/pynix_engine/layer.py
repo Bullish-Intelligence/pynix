@@ -131,6 +131,9 @@ class Layer:
     compiler_attr: str = ".#compiler"
     build_command: Callable[[Sequence[str]], Sequence[str]] | None = None  # adapt the build command (L134: root)
     preflight: Callable[["Session"], None] | None = None  # a check before any change, for example sudo (raise Fail)
+    # (session, built result) -> plain warning lines. Runs after the build and before `plan`, in `apply` and `undo`. The engine
+    # says each line. A line never stops the apply, and an error in the hook is logged and dropped (021-D3).
+    pin_check: Callable[["Session", str], Sequence[str]] | None = None
     fallback_identity: tuple[str, str] | None = None  # (name, email) for a commit when git knows none
     settle: float = SETTLE_SECONDS
     poll: float = 0.5

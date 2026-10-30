@@ -371,3 +371,41 @@ def test_the_default_runner_is_the_subprocess_runner(s: Setup) -> None:
     engine = Engine(basix_layer(s.world), s.ws)
     assert isinstance(engine.runner, SubprocessRunner)
     assert engine.env is os.environ
+
+
+# --- the pin check (021-D3) ----------------------------------------------------------------------------
+def test_pin_check_runs_once_after_the_build_and_before_the_plan(s: Setup) -> None:
+    seen: list[tuple[str, list[str]]] = []
+
+    def check(session: Session, built: str) -> list[str]:
+        seen.append((built, s.trace()))
+        s.world.plan_calls.append("check")
+        return ["warning: pins differ"]
+
+    assert s.engine(basix_layer(s.world, pin_check=check)).apply() == 0
+    assert seen == [(TOP_NEW, ["build"])]
+    assert s.world.plan_calls == ["check", TOP_NEW]
+    assert s.lines.index("warning: pins differ") < s.lines.index("Basix needs your password to change the machine")
+    assert s.git.commits == ["apply: system.py"]  # the apply went on
+
+
+def test_a_failing_pin_check_does_not_stop_the_apply(s: Setup) -> None:
+    def check(session: Session, built: str) -> list[str]:
+        raise RuntimeError("damaged")
+
+    assert s.engine(basix_layer(s.world, pin_check=check)).apply() == 0
+    assert s.git.commits == ["apply: system.py"]
+    assert not any("damaged" in line for line in s.lines)
+    assert "pin check failed" in s.log()
+
+
+def test_a_pin_check_that_returns_no_lines_at_all_stops_nothing(s: Setup) -> None:
+    def check(session: Session, built: str) -> list[str]:
+        return 5  # ty: ignore[invalid-return-type]  # not iterable: the engine drops it
+
+    assert s.engine(basix_layer(s.world, pin_check=check)).apply() == 0
+
+
+def test_no_pin_check_is_no_call_and_no_line(s: Setup) -> None:
+    assert s.engine().apply() == 0
+    assert "pin" not in "\n".join(s.lines)

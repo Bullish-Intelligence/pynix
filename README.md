@@ -61,6 +61,32 @@ output of the generators. `scripts/regenerate.sh` writes that output into `src/`
 `flake.lock` files (or folders that hold one). It prints one line per item and a `warning:` line for each
 difference. It blocks nothing: it exits 0 with or without differences, and 2 on wrong use or an unreadable lock.
 
+## Pin warning for layer authors
+
+Two layers can pin the same `python=` input at different revisions. A layer can warn about that. The warning never
+stops a command. Pynix names no layer and no path: the layer chooses the manifest file and the words.
+
+**Write the manifest.** `pynix.lib.pythonPins { declared = compiled.inputs; inputs = extraInputs; }` (`nix/pins.nix`)
+gives `{ version = 1; pins = [ ... ]; }`. Write it into the build output with `builtins.toJSON`. A row has
+`name`, `url` (without a user name or a password), `flake`, `python`, `rev`, and `narHash`. The `rev` and `narHash` come
+from `flake.lock`. `rev` is `null` for a `path:` input. Only inputs with `python=` have a row.
+
+**Read and compare** (`pynix_native.pins`):
+
+- `load(path) -> Manifest | None` reads a manifest. A missing, empty, or damaged file gives `None`.
+- `from_workspace(ws, json_file) -> Manifest | None` makes the manifest of the own workspace from the generated JSON and
+  `flake.lock`. A command without a build (`update`) uses it.
+- `compare(local, other) -> list[Mismatch]` gives one `Mismatch` for each input that both sides pin at another version.
+  A `Mismatch` has `local_name`, `other_name`, `url`, `local_rev`, and `other_rev`.
+- `lines(local, other, here=..., there=..., text=DEFAULT_TEXT) -> list[str]` makes one plain line for each mismatch. It
+  never raises. `here` and `there` are the layer's words for the two sides. `text` is a `str.format` template.
+
+Two pins are the same input when `normalize_url` gives the same text. The name is a local alias. The version is the
+locked `rev`, or the `narHash` when there is no `rev`.
+
+**Call it from `apply` and `undo`.** Set `Layer.pin_check = lambda session, built: [...]`. The engine calls it once,
+after the build and before `Layer.plan`. It says each line it returns. An error in the hook is logged and dropped.
+
 A [devenv](https://devenv.sh) **Python** project. This repository defines five
 Testee tasks in `devenv.nix`.
 The machine supplies the `testee` command. This project pins no Testee input.
