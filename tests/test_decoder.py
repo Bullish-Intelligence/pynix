@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from nixdantic import ExeOf, Native, Package, Text, supplied
+from nixdantic import ConfigFilter, ConfigIf, ConfigRef, ExeOf, Native, Package, PackageBuild, PkgsRef, Text, supplied
 from pynix_native import InputProg, NixpkgsProg
 from pynix_pkgs._pkgref import Exe
 
@@ -35,7 +35,16 @@ let
   pkgs = {
     hello = package "hello" "hello";
     ripgrep = package "ripgrep" "rg";
-    stdenv.hostPlatform.system = system;
+    stdenv = {
+      hostPlatform.system = system;
+      mkDerivation = args: package args.name null // { inherit args; };
+    };
+    symlinkJoin = args: package args.name (args.meta.mainProgram or null);
+    writeShellScript = name: text: package name "script" // { inherit text; };
+    callableJoin = {
+      __functor = self: args: package args.name (args.meta.mainProgram or null);
+    };
+    kernel.src = "kernel-source";
   };
   # `daemon` has a main program that differs from its attribute name. The input and the pin give different store paths.
   nixdemo = { packages.${system}.daemon = package "daemon-input" "daemon-bin"; };
@@ -44,6 +53,14 @@ let
     specialArgs = { inherit pkgs; inputs = { marker = "from-inputs"; nix-demo = nixdemo; nixpkgs-old = nixpkgsOld; }; };
     modules = [
       { options.fixture.value = lib.mkOption { type = lib.types.raw; }; }
+      {
+        options.fixture.environment = lib.mkOption {
+          type = lib.types.attrsOf lib.types.str;
+          default = { RESTIC_REPOSITORY = "repo"; RESTIC_CACHE_DIR = "cache"; PATH = "path"; };
+        };
+        options.fixture.secrets = lib.mkOption { type = lib.types.attrsOf lib.types.raw; default = { }; };
+      }
+      @STATE@
       (decoder { fragment = builtins.fromJSON ''@FRAGMENT@''; nativeRoot = @NATIVE@; })
     ];
   };
@@ -51,7 +68,7 @@ in (@THEN@) result.config.fixture.value
 """
 
 
-def decode(value: object, native_root: Path = ROOT, then: str = "x: x") -> str:
+def decode(value: object, native_root: Path = ROOT, then: str = "x: x", state: str = "{}") -> str:
     """Decode one value at `fixture.value` and give the result as a string (a store path or an error line).
 
     `native_root` is the folder of the native value files. `then` is a Nix function that turns the decoded value into
@@ -62,6 +79,7 @@ def decode(value: object, native_root: Path = ROOT, then: str = "x: x") -> str:
         EVAL.replace("@ROOT@", str(ROOT))
         .replace("@NATIVE@", str(native_root))
         .replace("@THEN@", then)
+        .replace("@STATE@", state)
         .replace("@FRAGMENT@", json.dumps(fragment))
     )
     done = subprocess.run([*NIX, "eval", "--impure", "--raw", "--expr", expr], capture_output=True, text=True)
@@ -85,6 +103,81 @@ def test_the_exe_is_a_part_of_a_text() -> None:
 @needs_nix
 def test_the_decoder_gives_a_package_as_the_package() -> None:
     assert decode(Text(Package("hello"), "/bin/hello")) == "/nix/store/00000000000000000000000000000000-hello/bin/hello"
+
+
+@needs_nix
+def test_pkgs_ref_reads_a_non_package_value() -> None:
+    assert decode(PkgsRef(["kernel", "src"])) == "kernel-source"
+
+
+@needs_nix
+def test_config_filter_reads_matching_keys_from_the_merged_config() -> None:
+    result = decode(
+        ConfigFilter(["fixture", "environment"], prefix="RESTIC_"),
+        then='x: x.RESTIC_REPOSITORY + ":" + x.RESTIC_CACHE_DIR',
+    )
+    assert result == "repo:cache"
+
+
+@needs_nix
+def test_config_if_selects_a_value_from_the_merged_config() -> None:
+    value = ConfigIf(
+        ["fixture", "secrets"],
+        "deepseek-api-key",
+        {"rendered": Text(ConfigRef(["fixture", "environment", "RESTIC_REPOSITORY"]))},
+    )
+    present = '{ fixture.secrets."deepseek-api-key" = { }; }'
+    assert decode(value, then="x: x.rendered", state=present) == "repo"
+    assert decode(value, then='x: if x == { } then "absent" else "present"') == "absent"
+
+
+@needs_nix
+def test_package_build_calls_a_pkgs_builder() -> None:
+    wrapper = PackageBuild(
+        attr="restic",
+        name="restic-no-password",
+        builder="symlinkJoin",
+        args={
+            "name": "restic-no-password",
+            "paths": [Package("ripgrep")],
+            "meta": {"mainProgram": "restic"},
+        },
+    )
+    assert decode(wrapper, then="p: p.outPath") == "/nix/store/00000000000000000000000000000000-restic-no-password"
+
+
+@needs_nix
+def test_package_build_calls_a_functor_builder() -> None:
+    wrapper = PackageBuild(
+        attr="callable-output",
+        name="callable-output",
+        builder="callableJoin",
+        args={"name": "callable-output", "meta": {"mainProgram": "callable-output"}},
+    )
+    assert decode(wrapper, then="p: p.outPath") == "/nix/store/00000000000000000000000000000000-callable-output"
+
+
+@needs_nix
+def test_package_build_accepts_typed_text_arguments() -> None:
+    script = PackageBuild(
+        attr="script",
+        name="script",
+        builder="writeShellScript",
+        args={},
+        positional=["script", Text(Package("hello"), "/bin/hello")],
+    )
+    assert decode(Text(script, "/bin/run")) == "/nix/store/00000000000000000000000000000000-script/bin/run"
+
+
+@needs_nix
+def test_package_build_passes_nixpkgs_values_to_a_derivation() -> None:
+    module = PackageBuild(
+        attr="kernel-module",
+        name="kernel-module",
+        builder="stdenv.mkDerivation",
+        args={"name": "kernel-module", "src": PkgsRef(["kernel", "src"])},
+    )
+    assert decode(module, then="p: p.args.src") == "kernel-source"
 
 
 @needs_nix

@@ -7,7 +7,7 @@ The generated libraries (`pynix_os`, `pynix_hm`, `pynix_flake_parts`) import thi
 - `Model`: the base class of every generated model. Strict, closed (no unknown field), and it emits only the
   fields that the caller supplied.
 - `Unset`: the value of a field that the caller did not supply. It is not `None`: `None` is the Nix `null`.
-- The typed references `Package`, `ConfigRef`, `Native`, `PathRef`, and `Text`. Nix resolves them (see `decoder.nix`).
+- The typed references `Package`, `PackageBuild`, `PkgsRef`, `ConfigRef`, `ConfigFilter`, `ConfigIf`, `Native`, `PathRef`, and `Text`. Nix resolves them (see `decoder.nix`).
   `Package("hello")` takes its main value by position (009-D42).
   `Text` is a string that holds references: `Text(Package("hello"), "/bin/hello")` is `"${pkgs.hello}/bin/hello"`.
 - `NixValue`: free-form data (`JsonValue` plus the references, at any depth). Its containers are `Sequence` and `Mapping`.
@@ -50,6 +50,8 @@ from pydantic_core import PydanticCustomError, core_schema
 __all__ = [
     "After",
     "Before",
+    "ConfigFilter",
+    "ConfigIf",
     "ConfigRef",
     "Default",
     "ExeOf",
@@ -61,6 +63,8 @@ __all__ = [
     "NixValue",
     "Order",
     "Package",
+    "PackageBuild",
+    "PkgsRef",
     "PathRef",
     "Plain",
     "PriorityError",
@@ -140,6 +144,42 @@ class ConfigRef(Reference):
         def __init__(self, path: list[str]) -> None: ...
 
 
+class ConfigFilter(ConfigRef):
+    """The attributes with a prefix from another option in the final NixOS configuration."""
+
+    prefix: str
+
+    if TYPE_CHECKING:
+
+        def __init__(self, path: list[str], *, prefix: str) -> None: ...
+
+
+class ConfigIf(Reference):
+    """A value when a key exists at a path in the final NixOS configuration, or an empty attribute set."""
+
+    _positional: ClassVar[tuple[str, ...]] = ("path", "key", "value")
+    kind: Literal["config_if"] = "config_if"
+    path: list[str]
+    key: str
+    value: Any
+
+    if TYPE_CHECKING:
+
+        def __init__(self, path: list[str], key: str, value: Any) -> None: ...
+
+
+class PkgsRef(Reference):
+    """A value below the pinned `pkgs`, including non-package data such as a kernel source path."""
+
+    _positional: ClassVar[tuple[str, ...]] = ("path",)
+    kind: Literal["pkgs_value"] = "pkgs_value"
+    path: list[str]
+
+    if TYPE_CHECKING:
+
+        def __init__(self, path: list[str]) -> None: ...
+
+
 class Native(Reference):
     """A value from a native Nix file of the workspace: `file` relative to the workspace, then `attr`.
 
@@ -200,14 +240,13 @@ class Text(Reference):
 
     `Text(Package(attr="hello"), "/bin/hello")` is the Nix string `"${pkgs.hello}/bin/hello"`. The string keeps
     the context of the package, so the package stays a dependency of the system. A string part is always
-    literal: Nix does not read `${...}` in it. A reference part is a `Package`, a `ConfigRef`, a `Native`, a `PathRef`,
-    an `ExeOf`, or another `Text`.
+    literal: Nix does not read `${...}` in it. A reference part is any typed reference that decodes to a string or path.
     """
 
     kind: Literal["text"] = "text"
-    parts: list[str | Package | ConfigRef | Native | PathRef | ExeOf | Text]
+    parts: list[str | SerializeAsAny[Reference]]
 
-    def __init__(self, *parts: str | Package | ConfigRef | Native | PathRef | ExeOf | Text) -> None:
+    def __init__(self, *parts: str | Reference) -> None:
         super().__init__(parts=list(parts))
 
     # Pydantic calls a custom `__init__` with the keys of every dict that it validates against `Text`. That broke
@@ -300,12 +339,37 @@ type NixValue = (
     | str
     | Text
     | Package
+    | PkgsRef
     | ConfigRef
+    | ConfigFilter
+    | ConfigIf
     | Native
     | PathRef
     | Sequence[NixValue]
     | Mapping[str, NixValue]
 )
+
+
+class PackageBuild(Package):
+    """A package built by a function from `pkgs`, with typed values for its arguments."""
+
+    kind: Literal["package_build"] = "package_build"
+    name: str
+    builder: str
+    args: Mapping[str, NixValue]
+    positional: Sequence[NixValue] = ()
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            attr: str,
+            name: str,
+            builder: str,
+            args: Mapping[str, NixValue],
+            positional: Sequence[NixValue] = (),
+        ) -> None: ...
 
 
 _POSIX_CLASSES = {
@@ -419,6 +483,8 @@ _REF_TAGS = {
     "ConfigRef",
     "Native",
     "Package",
+    "PackageBuild",
+    "PkgsRef",
     "PathRef",
     "Text",
     "is-instance[UnsetType]",
@@ -713,7 +779,13 @@ def supplied(value: object) -> JsonValue:
     if isinstance(value, Text):
         return {"__nixdantic_ref__": {"kind": "text", "parts": [supplied(part) for part in value.parts]}}
     if isinstance(value, Reference):
-        return {"__nixdantic_ref__": value.model_dump()}
+        wire = value.model_dump()
+        if isinstance(value, PackageBuild):
+            wire["args"] = supplied(value.args)
+            wire["positional"] = supplied(value.positional)
+        if isinstance(value, ConfigIf):
+            wire["value"] = supplied(value.value)
+        return {"__nixdantic_ref__": wire}
     if isinstance(value, Model):
         names, paths = type(value).__nix_names__, type(value).__nix_paths__
         result: dict[str, JsonValue] = {}

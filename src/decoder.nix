@@ -11,6 +11,7 @@
 #     (`ExeOf`, `nixdantic`). It fails when `of` is not a derivation;
 #   - the reference kind "native" (PF-5, PF-8): a function gets the module arguments that it names. A whole-value
 #     reference (empty `attr`) calls only a function that names an argument, so an overlay `final: prev:` stays a function.
+#   - `ConfigFilter` and `ConfigIf`: read a prefix-filtered attribute set or a key-dependent value from final `config`.
 #   - the reference kinds "priority" and "order" (L128): `Force(v)` is `lib.mkOverride 50`, `Before(v)` is `lib.mkOrder 500`.
 { fragment, nativeRoot ? ./. }:
 args@{ lib, config, pkgs, inputs ? { }, ... }:
@@ -21,6 +22,23 @@ let
     let path = lib.splitString "." attr;
     in if lib.hasAttrByPath path pkgs then lib.getAttrFromPath path pkgs
        else fail "unknown package `${attr}`: pkgs has no attribute `${attr}`";
+  pkgsValue = ref:
+    if lib.hasAttrByPath ref.path pkgs then lib.getAttrFromPath ref.path pkgs
+    else fail "unknown pkgs value `${lib.concatStringsSep "." ref.path}`";
+  callable = value: builtins.isFunction value || (builtins.isAttrs value && value ? __functor);
+  packageBuild = ref:
+    let
+      path = lib.splitString "." ref.builder;
+      builder = if lib.hasAttrByPath path pkgs then lib.getAttrFromPath path pkgs
+                else fail "unknown package builder `${ref.builder}`: pkgs has no such attribute";
+      partial = lib.foldl' (fn: value: fn (decode value)) builder (if ref ? positional then ref.positional else [ ]);
+      args = decode ref.args;
+      result = if callable partial then partial args
+               else if args == { } then partial
+               else fail "package builder `${ref.builder}` returned a value before its argument set";
+    in if !callable builder then fail "package builder `${ref.builder}` is not callable"
+       else if lib.isDerivation result then result
+       else fail "package builder `${ref.builder}` did not return a derivation";
   # SG36: `python3.withPackages (ps: [ ps.requests ])`. `attr` is the interpreter; `packages` are attribute paths
   # below its package set (`ps`).
   withPackages = ref:
@@ -82,7 +100,17 @@ let
          else if ref.kind == "with_packages" then withPackages ref
          else if ref.kind == "input_package" then inputPackage ref
          else if ref.kind == "nixpkgs_package" then nixpkgsPackage ref
-         else if ref.kind == "config" then lib.getAttrFromPath ref.path config
+         else if ref.kind == "pkgs_value" then pkgsValue ref
+         else if ref.kind == "package_build" then packageBuild ref
+         else if ref.kind == "config" then
+           let value = lib.getAttrFromPath ref.path config;
+           in if ref ? prefix then
+             if builtins.isAttrs value then lib.filterAttrs (name: _: lib.hasPrefix ref.prefix name) value
+             else fail "config filter `${lib.concatStringsSep "." ref.path}` needs an attribute set"
+           else value
+         else if ref.kind == "config_if" then
+           let value = lib.attrByPath ref.path { } config;
+           in if builtins.isAttrs value && builtins.hasAttr ref.key value then decode ref.value else { }
          else if ref.kind == "path" then builtins.path { path = (let p = nativeRoot + "/${ref.file}"; in if builtins.isPath p then p else builtins.unsafeDiscardStringContext p); name = baseNameOf ref.file; }  # the file alone, copied to the store as `./file` is
          else if ref.kind == "native" then lib.getAttrFromPath ref.attr (nativeValue ref)
          else if ref.kind == "priority" then lib.mkOverride ref.level (decode ref.value)

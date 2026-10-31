@@ -20,6 +20,22 @@ calls a function with the module arguments that it names. When `attr` is empty, 
 (`{ pkgs, ... }:`) and returns any other value as it is. Nix cannot tell `{ ... }:` from `final: prev:`, so the
 decoder returns a whole-value file `{ ... }:` as a function and does not call it.
 
+`PkgsRef(["linuxPackages_testing", "kernel", "src"])` reads a value below `pkgs`. Use it for values that are not
+packages. `PackageBuild` calls a function below `pkgs` and returns its derivation. It accepts positional values and an
+argument set. References inside those values keep their normal meaning.
+
+`ConfigFilter` selects keys with a prefix from the final merged configuration. `ConfigIf` selects a value when a key
+exists at a path in that configuration. These references support options that depend on other modules.
+
+```python
+PackageBuild(
+    attr="restic",
+    name="restic-no-password",
+    builder="symlinkJoin",
+    args={"name": "restic-no-password", "paths": [Package("restic")]},
+)
+```
+
 ## Python code of an input
 
 `Input("tools", "github:me/tools", python="src")` makes the Python code of an input importable in the entry file
