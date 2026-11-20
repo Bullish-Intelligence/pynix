@@ -44,3 +44,4 @@ result-*
 .worktrees
 .jj/
 .loci
+/.workspaces/
