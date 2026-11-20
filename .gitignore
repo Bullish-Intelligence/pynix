@@ -34,9 +34,6 @@ __pycache__/
 result
 result-*
 
-# CopyRoom local state (owner paths)
-.copyroom-local.json
-
 # Plane links (devman, linkman, gitman, jj)
 .envrc
 .devman
